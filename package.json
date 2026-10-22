@@ -1,0 +1,7 @@
+{
+  "name": "pvpgame",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Independent static PvE testing fork of PVP Arena",
+  "scripts": { "start": "node tools/serve.cjs", "check": "node tools/check.cjs" }
+}

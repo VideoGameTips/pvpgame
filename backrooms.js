@@ -288,6 +288,7 @@
   }
   function toggleFlash(){if(!state||paused)return;if(state.level.id===6){notice('The flashlight produces no light here. Feel the passage.',4);return;}state.flash=!state.flash;}
   function finish(){
+    playSoundEvent('victory',{minGap:1000});
     state.status='complete';const id=state.level.id;save.unlocked=Math.max(save.unlocked,Math.min(9,id+1));if(id===9)save.complete=true;const saved=persist();
     panel(id===9?'The field beyond':'Level '+id+' traversed',id===9?'For the first time in hours, the air moves. You reached the end of this expedition. The Backrooms have not ended.':'A passage opens. Somewhere behind you, the sound changes.');
     if(!saved)menu.append(node('p','Device storage is unavailable. Keep this session open to retain your checkpoint.'));

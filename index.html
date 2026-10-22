@@ -1565,6 +1565,15 @@
     });
   </script>
 
+  <style>
+    #end-countdown { position:fixed;top:92px;left:50%;transform:translateX(-50%);z-index:90;pointer-events:none;color:#ffd36c;font:bold 34px 'Courier New',monospace;text-shadow:0 2px 8px #000;min-width:64px;text-align:center;border-bottom:3px solid currentColor;padding:3px 8px; }
+    #end-countdown[hidden] { display:none; }
+    #end-countdown.urgent { color:#ff655b; }
+    #end-countdown.beat { animation:end-clock-beat .45s ease-out; }
+    @keyframes end-clock-beat { from { transform:translateX(-50%) scale(1.24); } to { transform:translateX(-50%) scale(1); } }
+    @media(prefers-reduced-motion:reduce) { #end-countdown.beat { animation:none; } }
+  </style>
+  <div id="end-countdown" hidden aria-label="Seconds remaining"></div>
   <script src="three.min.js"></script>
   <script>
     if (typeof THREE === 'undefined') {

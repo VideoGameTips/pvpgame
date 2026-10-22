@@ -5107,7 +5107,30 @@ function playSoundEvent(name, opts = {}) {
     } catch (e) {}
   }
 
-  if (name === 'wood_break') {
+  if (name === 'victory' || name === 'round_win') {
+    const full=name==='victory',beat=full?.13:.09;
+    const notes=full?[261.63,329.63,392,523.25,659.25,783.99]:[392,523.25,659.25];
+    playSweptNoise(ctx,start,.28,out,.11*mult,'highpass',650,6500,.7);
+    playTone(ctx,start,.32,out,115,48,.25*mult,'sine');
+    notes.forEach((f,i)=>{
+      playTone(ctx,start+i*beat,.24,out,f,f*.998,.105*mult,'triangle');
+      playTone(ctx,start+i*beat,.32,out,f*2,f*2,.045*mult,'sine');
+    });
+    const land=start+notes.length*beat;
+    for(const f of [261.63,329.63,392,523.25])playTone(ctx,land,full?1.45:.55,out,f,f,.065*mult,'triangle');
+    playTone(ctx,land,.48,out,88,44,.23*mult,'sine');
+    playFilteredNoise(ctx,land,.36,out,.09*mult,'highpass',4800,.6);
+    if(full)for(let i=0;i<3;i++)playTone(ctx,land+.18+i*.14,.65,out,1046.5+i*261.63,1046.5+i*261.63,.035*mult,'sine');
+  } else if (name === 'final_tick') {
+    const seconds=Math.max(1,Math.min(10,opts.seconds||10)),urgent=seconds<=5;
+    const pitch=urgent?880+(5-seconds)*95:620;
+    playTone(ctx,start,.085,out,pitch,pitch*.88,.13*mult,'triangle');
+    playFilteredNoise(ctx,start,.018,out,.075*mult,'highpass',2400,.7);
+    if(urgent){
+      playTone(ctx,start+.16,.065,out,pitch*1.12,pitch,.10*mult,'triangle');
+      playTone(ctx,start,.18,out,72,46,.15*mult,'sine');
+    }
+  } else if (name === 'wood_break') {
     playFilteredNoise(ctx,start,.11,out,.5*mult,'bandpass',1300,.8);
     playFilteredNoise(ctx,start+.04,.38,out,.32*mult,'lowpass',850,.7);
     for(let i=0;i<3;i++) playTone(ctx,start+i*.035,.07,out,210+i*65,65,.12*mult,'triangle');
@@ -61416,6 +61439,7 @@ function startMatchRound() {
 // '💀 ELIMINATED' is you being knocked out of the match, which is a moment.
 const MOMENT_RE = /^(MATCH START|ROUND |🏁 ROUND|ROUND WIN|ROUND LOST|VICTORY|DEFEAT|YOUR TEAM WINS|ENEMY WINS|YOU DIED|💀 ELIMINATED|⚔️ DUEL|⚔️ TIEBREAKER|WAVE |FINAL WAVE|👑 KING OF THE HILL|GET READY|GO!)/;
 function showAnnouncement(text, sub, color, duration) {
+  if(text==='ROUND WIN!')playSoundEvent('round_win',{minGap:800});
   const big = MOMENT_RE.test(String(text || ''));
   pushFeedLine(text, sub, color, big);
   if (!big) return;
@@ -62740,20 +62764,34 @@ function checkRaceWin() {
   else if (match.teamKills.enemy >= match.cfg.killGoal) endMatch('enemy', 'KILL GOAL REACHED');
 }
 
+function clearEndCountdown() {
+  const el=document.getElementById('end-countdown');if(el)el.hidden=true;
+}
+function updateEndCountdown(seconds) {
+  if(!match || match.over || !match.active || !match.roundActive || matchTimeUnlimited() || !Number.isFinite(seconds) || seconds<=0 || seconds>10){clearEndCountdown();return;}
+  const second=Math.ceil(seconds);
+  if(match._countdownSecond===second && match._countdownRound===match.round)return;
+  match._countdownSecond=second;match._countdownRound=match.round;
+  playSoundEvent('final_tick',{seconds:second,minGap:0});
+  const el=document.getElementById('end-countdown');if(!el)return;
+  el.hidden=false;el.textContent=String(second);el.classList.toggle('urgent',second<=5);
+  el.classList.remove('beat');void el.offsetWidth;el.classList.add('beat');
+}
 function updateMatchTimer(dt) {
-  if (!match || !match.active || match.over) return;
+  if (!match || !match.active || match.over || !match.roundActive) { clearEndCountdown();return; }
   if (match.type === 'campaign' || match.type === 'backrooms') return;
   if (match.arcade === 'roulette' && match.roundActive && !isDead && Date.now() >= (match.rouletteNext || Infinity)) {
     match.rouletteNext = Date.now() + ROULETTE_MS;
     rouletteShuffle();
   }
   if (match.arcade === 'zombie' && match.roundActive) updateZombieMode(dt);
-  if (matchTimeUnlimited()) { updateMatchHUD(); return; }
+  if (matchTimeUnlimited()) { clearEndCountdown();updateMatchHUD(); return; }
   // ── Elim mode: per-round 60-second timer ─────────────────────────────────
   if (match.type === 'elim') {
     if (!match.roundActive) return;
     if (match.roundTimeLeft == null || match.roundTimeLeft <= 0) return;
     match.roundTimeLeft -= dt;
+    updateEndCountdown(match.roundTimeLeft);
     if (match.roundTimeLeft <= 0) {
       match.roundTimeLeft = 0;
       resolveElimRoundByHP();
@@ -62763,6 +62801,7 @@ function updateMatchTimer(dt) {
   }
   if (!match.cfg.timeLimit) return; // frontlines / dday / laststand have no timer
   match.timeLeft -= dt;
+  updateEndCountdown(match.timeLeft);
   if (match.timeLeft <= 0) { match.timeLeft = 0; onTimeUp(); }
   // Update HUD timer every second is enough — but we call it every frame for smooth display
   updateMatchHUD();
@@ -62875,6 +62914,8 @@ function startTiebreaker() {
 
 function endMatch(winner, reason) {
   if (!match || match.over) return;
+  clearEndCountdown();
+  if(winner==='ally' && !match.forfeit)playSoundEvent('victory',{minGap:1000});
   match.over   = true;
   match.active = false;
   contractsOnMatchEnd(winner);          // a win streak, and the contracts that were waiting on this match
@@ -68199,6 +68240,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  clearEndCountdown();
   window.PVP_RAGDOLL?.clear();
   window.PVP_BACKROOMS?.stop();
   window.PVP_UNDERWORLD?.stop();

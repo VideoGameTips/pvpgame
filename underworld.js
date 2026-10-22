@@ -252,6 +252,7 @@
     const lines = [...r.mission.outro, ...(ending ? D.endings[ending].lines : [])];
     dialogue(lines, () => {
       show('complete');
+      playSoundEvent('victory',{minGap:1000});
       const content = el('div', null, 'uw-result'), rankAfter = D.rank(progress).name;
       content.append(el('small', ending ? 'CAMPAIGN COMPLETE' : `MISSION ${r.mission.id} COMPLETE`), el('h1', ending ? D.endings[ending].title : r.mission.title));
       const awarded = D.reputation(progress) - repBefore;

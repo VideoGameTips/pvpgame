@@ -11811,10 +11811,8 @@ function addGridClutter(name, half, s, boost = 0) {
   }
   return placed;
 }
-// 🪜 A wall-mounted ladder: a safety-yellow climb strip (the actual collider —
-// any tall wall is already climbable via the wall-scramble move, this just
-// marks WHERE so it reads as a real route instead of an accidental exploit)
-// plus dark rung lines purely for silhouette. x/z/fromY/toY are world units
+// A thin solid climb surface prevents bodies jumping through the visible rungs.
+// x/z/fromY/toY are world units
 // (already s-scaled by the caller, matching addGridStairs' convention).
 function addGridLadder(name, x, z, rotY, fromY, toY, width = 1.15) {
   const height = toY - fromY;
@@ -11823,7 +11821,7 @@ function addGridLadder(name, x, z, rotY, fromY, toY, width = 1.15) {
   anchor.visible = false;
   anchor.userData.mapStatic = true;
   anchor.position.set(x,fromY+height/2,z); anchor.rotation.y = rotY;
-  addMapMesh(name,anchor,false);
+  addMapMesh(name,anchor,true);
   const ladder = { anchor, width };
   (MAP_LADDERS[name] ||= []).push(ladder);
   const sinR = Math.sin(rotY), cosR = Math.cos(rotY);
@@ -11853,7 +11851,9 @@ function mapLadderPose(ladder) {
   const box = new THREE.Box3().setFromObject(ladder.anchor);
   const center = ladder.anchor.getWorldPosition(new THREE.Vector3());
   const normal = ladder.anchor.getWorldDirection(new THREE.Vector3()); normal.y = 0; normal.normalize();
-  return { x:center.x,z:center.z,bottom:box.min.y,top:box.max.y,normal,width:ladder.width };
+  // Diagonal landing colliders have wider axis-aligned corners; keep the head clear.
+  const offset=.55+.9*Math.abs(normal.x*normal.z);
+  return { x:center.x,z:center.z,bottom:box.min.y,top:box.max.y,normal,width:ladder.width,offset };
 }
 
 function updateMapLadderMove(dt, input) {
@@ -11875,7 +11875,7 @@ function updateMapLadderMove(dt, input) {
       const p = mapLadderPose(candidate), dx = camera.position.x-p.x, dz = camera.position.z-p.z;
       const sideways = Math.abs(dx*p.normal.z-dz*p.normal.x), front = dx*p.normal.x+dz*p.normal.z;
       const feet = playerFeetY();
-      if (sideways > p.width/2+.25 || front < -.15 || front > 1 || feet < p.bottom-.35 || feet > p.top+.2) continue;
+      if (sideways > p.width/2+.25 || front < -.15 || front > p.offset+.45 || feet < p.bottom-.35 || feet > p.top+.2) continue;
       if (input.dot(p.normal) > -.15 && !(keys['KeyS'] || joyDir.y > .15)) continue;
       ladder = candidate; window._mapLadder = ladder; break;
     }
@@ -11885,8 +11885,10 @@ function updateMapLadderMove(dt, input) {
   if (keys['Space'] || window._mobileJump) {
     window._mapLadder = null; window._ladderDetachUntil = Date.now()+450;
     window._prevSpaceDown = true; window._mobileJump = false; playerYVel = 6.5;
-    _extVel.x = (input.lengthSq() ? input.x : p.normal.x)*5;
-    _extVel.z = (input.lengthSq() ? input.z : p.normal.z)*5;
+    const away=input.clone(),outward=away.dot(p.normal);
+    away.addScaledVector(p.normal,Math.max(.8-outward,0)).normalize();
+    _extVel.x = away.x*5;
+    _extVel.z = away.z*5;
     return false;
   }
   const upward = (keys['KeyW'] || joyDir.y < -.15) ? 1 : 0;
@@ -11894,7 +11896,7 @@ function updateMapLadderMove(dt, input) {
   const speed = Date.now() < playerRootedUntil ? 0 : 9*Math.max(0,playerFrostSlow)/100;
   playerFrostSlow = Math.min(100,playerFrostSlow+dt*2);
   const feet = THREE.MathUtils.clamp(playerFeetY()+(upward-downward)*speed*dt,p.bottom,p.top);
-  camera.position.x = p.x+p.normal.x*.55; camera.position.z = p.z+p.normal.z*.55;
+  camera.position.x = p.x+p.normal.x*p.offset; camera.position.z = p.z+p.normal.z*p.offset;
   const previousY = camera.position.y;
   camera.position.y = feet+eye; playerYVel = 0;
   window._slideUntil = 0; window._climbing = true;
@@ -13517,7 +13519,7 @@ function _bkit(name) {
   K.stairs = (x, z, dir, rise, width, c, y0 = 0, depth = 1.1, stepH = 0.4) => {
     const r = rawStairs(x, z, dir, rise, width, c, y0, depth, stepH);
     const dx = dir === 'E' ? 1 : dir === 'W' ? -1 : 0, dz = dir === 'S' ? 1 : dir === 'N' ? -1 : 0;
-    K.poi('stairs top', x + dx * (r.n - 1) * depth, z + dz * (r.n - 1) * depth, y0 + rise);
+    K.poi('stairs top', r.topX ?? x + dx * (r.n - 1) * depth, r.topZ ?? z + dz * (r.n - 1) * depth, y0 + rise);
     return r;
   };
   // A solid raised block with a stair up each side asked for ('n' -z, 's' +z, 'w' -x, 'e' +x).

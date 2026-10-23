@@ -49,9 +49,11 @@ special-purpose courses are retained. Physical floors, ragdolls and bot routes
 share the footprint's rectangle union; the surrounding bounding box alone is
 not treated as walkable ground. Edge walls follow the actual perimeter.
 
-Shared architectural stairs retain their original run, width and landing height,
-but use risers no higher than 0.19 metres, tread nosings, side stringers and
-handrails. Decorative fixtures and trim are batched and do not add tiny movement
+Shared architectural stairs use compact runs while retaining their width,
+upper connection and landing height, with risers no higher than 0.19 metres,
+tread nosings, side stringers and handrails. Ladders have a thin solid collision
+surface; jumping off a ladder pushes away rather than through it.
+Decorative fixtures and trim are batched and do not add tiny movement
 colliders. Natural districts use faceted stone and soil patches; built-up
 districts get paving joints, storage-unit hardware and wall/roof detailing.
 

@@ -51,17 +51,17 @@
   }
   function stairs(name,x,z,dir,rise,width,color,y0=0,depth=1.1,stepH=.4) {
     const original=Math.max(2,Math.round(rise/stepH)),sub=Math.max(1,Math.ceil(rise/original/.19)),n=original*sub;
-    const tread=depth/sub,sh=rise/n,dx=dir==='E'?1:dir==='W'?-1:0,dz=dir==='S'?1:dir==='N'?-1:0;
+    const run=Math.min(original*depth,Math.max(.65,rise*1.65)),end=(original-.5)*depth,start=end-run;
+    const tread=run/n,sh=rise/n,dx=dir==='E'?1:dir==='W'?-1:0,dz=dir==='S'?1:dir==='N'?-1:0;
     const buf=_thBuf(),dark=_thShade(color,.56),edge=_thShade(color,1.24),group=MAP_GROUPS[name];
     const at=(u,h,v)=>new THREE.Vector3(x+dx*u-dz*v,y0+h,z+dz*u+dx*v);
     const box=(u,h,v,w,H,d,c)=>{const p=at(u,h,v);_thBox(buf,_TH_WORLD,p.x,p.y,p.z,dx?d:w,H,dx?w:d,c);};
     for(let i=0;i<n;i++){
-      const u=-depth/2+tread*(i+.5),top=(i+1)*sh,p=at(u,top/2,0);
+      const u=start+tread*(i+.5),top=(i+1)*sh,p=at(u,top/2,0);
       box(u,top/2,0,width,top,tread,color);
       box(u-tread/2+.025,top-.018,0,width,.036,.05,edge);
       MAP_COLLIDERS[name].push(new THREE.Box3(new THREE.Vector3(p.x-(dx?tread:width)/2,y0,p.z-(dx?width:tread)/2),new THREE.Vector3(p.x+(dx?tread:width)/2,y0+top,p.z+(dx?width:tread)/2)));
     }
-    const start=-depth/2,end=(original-.5)*depth;
     for(const side of [-1,1]){
       const v=side*(width/2+.055);
       beam(buf,at(start,.08,v),at(end,rise-.08,v),.14,dark);
@@ -74,8 +74,8 @@
       }
     }
     _thMesh(group,buf,false);const m=group.children.at(-1);m.userData.mapStatic=true;m.userData.craftedStairs=true;m.receiveShadow=true;
-    (group.userData.stairFlights ||= []).push({x,z,dir,rise,width,y0,run:original*depth,steps:n,riser:sh,tread});
-    return {run:original*depth,n:original};
+    (group.userData.stairFlights ||= []).push({x,z,dir,rise,width,y0,run,originalRun:original*depth,steps:n,riser:sh,tread});
+    return {run,n:original,topX:x+dx*(end-tread/2),topZ:z+dz*(end-tread/2)};
   }
   function build(name) {
     const cfg=profiles[name],group=MAP_GROUPS[name],old=MAP_BOUNDS[name],voidInfo=MAP_VOID[name];

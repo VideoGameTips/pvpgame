@@ -41,6 +41,20 @@ The copied code contains historical multiplayer helper definitions; they are
 not reachable matchmaking services. Bot combat continues to use the original
 client-side damage simulation instead of an external server.
 
+## Map Craft
+
+`map-craft.js` adds authored side districts and irregular footprints to eighteen
+arena maps. The original combat centres, spawn locations, lobby, Blank and
+special-purpose courses are retained. Physical floors, ragdolls and bot routes
+share the footprint's rectangle union; the surrounding bounding box alone is
+not treated as walkable ground. Edge walls follow the actual perimeter.
+
+Shared architectural stairs retain their original run, width and landing height,
+but use risers no higher than 0.19 metres, tread nosings, side stringers and
+handrails. Decorative fixtures and trim are batched and do not add tiny movement
+colliders. Natural districts use faceted stone and soil patches; built-up
+districts get paving joints, storage-unit hardware and wall/roof detailing.
+
 ## Credits
 
 Original PVP Arena by VideoGameTips. Three.js is bundled under its MIT license.

@@ -13496,6 +13496,7 @@ function _bkit(name) {
   };
   // Stairs: (x, z) is the foot, the middle of the first step. dir is the way you climb: N = -z, S = +z, E = +x, W = -x.
   K.stairs = (x, z, dir, rise, width, c, y0 = 0, depth = 1.1, stepH = 0.4) => {
+    if(window.PVE_MAP_CRAFT)return window.PVE_MAP_CRAFT.stairs(name,x,z,dir,rise,width,c,y0,depth,stepH);
     const n = Math.max(2, Math.round(rise / stepH)), sh = rise / n;
     const dx = dir === 'E' ? 1 : dir === 'W' ? -1 : 0, dz = dir === 'S' ? 1 : dir === 'N' ? -1 : 0;
     for (let i = 0; i < n; i++) {
@@ -20084,6 +20085,7 @@ function _upgradeMap(name) {
   try { _gimMap(name); } catch (e) { console.warn('[upgrade] gimmick', name, e); }
   try { addMapRealism(name); } catch (e) { console.warn('[upgrade] realism', name, e); }
   try { addMapWear(name); } catch (e) { console.warn('[upgrade] wear', name, e); }
+  try { window.PVE_MAP_CRAFT?.build(name); } catch(e) { console.warn('[upgrade] footprint',name,e); }
   // what was just added gets the same surface as the rest
   try { g._weathered = false; weatherMapGroup(g); } catch (e) {}
   g.userData.upgradeMs = Math.round(performance.now() - t0);
@@ -43905,6 +43907,7 @@ function isOutOfBoundsXZ(x, z) {
 // Bots have no falling to do: they are killed at the edge of the floor, as they always were.
 function isBotOutOfBoundsXZ(x, z) {
   if (M4_TOWER_MAP_NAMES.has(activeMapName)) return false;
+  if(MAP_GROUPS[activeMapName]?.userData.footprint && !floorExistsAt(x,z))return true;
   const b = getMapBoundsRect();
   return Math.abs(x) > b.halfX || Math.abs(z) > b.halfZ;
 }
@@ -64486,6 +64489,9 @@ function _botNavGrid() {
         if (Math.hypot(x0 + (i + 0.5) * cell - z.x, z0 + (j + 0.5) * cell - z.z) < r) blocked[j * W + i] = 1;
       }
     }
+  }
+  if(MAP_GROUPS[activeMapName]?.userData.footprint)for(let j=0;j<H;j++)for(let i=0;i<W;i++){
+    if(!floorExistsAt(x0+(i+.5)*cell,z0+(j+.5)*cell))blocked[j*W+i]=1;
   }
   Object.assign(_botNav, { map: activeMapName, sig, cell, W, H, x0, z0, blocked, builtAt: now, goal: -1, dist: null });
   return _botNav;

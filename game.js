@@ -99,7 +99,7 @@ const WEAPONS = [
   },
   {
     id: 'lever', name: 'Lever Rifle', type: 'Marksman', slot: 'primary',
-    mag: 8, reserve: 40, damage: 93, fireRate: 520, reloadTime: 2300,
+    mag: 8, reserve: 40, damage: 93, fireRate: 520, reloadTime: 3600, reloadStyle: 'shell',
     auto: false, pellets: 1, spread: 0.002, adsZoom: 32, bulletSpeed: 184, noReload: false,
     recoil: { up: 0.016, side: 0.007, climb: 0.16, max: 1.9, recover: 7.5, adsMult: 0.55 },
     ability: { name: 'Deadeye', cd: 16000, desc: 'Next shot deals 150 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'lever_ab' },
@@ -142,7 +142,7 @@ const WEAPONS = [
   },
   {
     id: 'grenade_launcher', name: 'Grenade Launcher', type: 'Explosive', slot: 'primary',
-    mag: 6, reserve: 18, damage: 90, fireRate: 692, reloadTime: 1500,
+    mag: 6, reserve: 18, damage: 90, fireRate: 692, reloadTime: 3600, reloadStyle: 'shell',
     auto: false, pellets: 1, spread: 0.006, adsZoom: 52, bulletSpeed: 52, noReload: false,
     bulletColor: 0x2f8f2f, bulletSize: 0.14,
     ability: { name: 'Cluster', cd: 15000, desc: 'Fire 3 grenades in a spread', type: 'multishot', count: 3, spread: 0.12, noADS: true },
@@ -5119,6 +5119,7 @@ function playReloadSound(w, durMs, plan) {
     else if (e.k === 'shell')   { arriving ? shellIn(t) : tinkle(t, Math.min(4, e.n)); }
     else if (e.k === 'round' || e.k === 'dart') { arriving ? roundIn(t) : tinkle(t, Math.min(4, e.n)); }
     else if (e.k === 'grenade') { arriving ? heavyIn(t) : tinkle(t, Math.min(4, e.n)); }
+    else if(e.k==='ball'&&id==='paintball')playFilteredNoise(ctx,t,.018,g,V*.26,'lowpass',650,.5,.001,1.8);
     else if (e.k === 'clip')    { arriving ? magIn(t)   : tinkle(t, 2); }
     else                        { tinkle(t, Math.min(5, e.n)); }   // cases, links
   }
@@ -5134,7 +5135,7 @@ function playReloadSound(w, durMs, plan) {
   // The assembly, at the frames it actually moves.
   const model=weaponModels[WEAPONS.findIndex(item=>item.id===id)];
   const rack=magazineRackTiming(model,w,evs);
-  const beats = assemblyBeats(id, plan && plan.keys);
+  const beats = plan?.handLoaded?{open:plan.openAt,shut:plan.latchAt}:assemblyBeats(id, plan && plan.keys);
   if (beats) {
     if (beats.open !== null) metalClack(ctx, at(beats.open), g, V * 0.75, 500, 0.085);
     if (beats.shut !== null) metalClack(ctx, at(beats.shut), g, V * 0.95, 400, 0.100);
@@ -21494,19 +21495,19 @@ function buildBoomstick() {
 
 function buildSnubRevolver() {
   // 🔫 Snub-nose .38: two-inch barrel, shrouded ejector rod, the fluted
-  // five-shot cylinder with its chambers actually bored, a bobbed hammer and
+  // six-shot cylinder with its chambers actually bored, a bobbed hammer and
   // a rounded boot grip.
   const g = new THREE.Group();
   const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
   const grip = GUN_MATS.grip(), inner = GUN_MATS.inner();
   gpBox(g, blued, 0.026, 0.040, 0.070, 0, 0.016, 0.024);            // frame
   gpBox(g, inner, 0.027, 0.006, 0.058, 0, 0.034, 0.024);            // top strap
-  // Five chambers, so 72 degrees a shot.
+  // Match the six-round gameplay cylinder.
   gpPart(g, 'main', () => {
     // Cylinder: fluted, with the chambers bored through the face.
     gpCyl(g, steel, 0.026, 0.026, 0.048, 14, 0, 0.014, -0.014);
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
       gpBox(g, inner, 0.010, 0.010, 0.040, Math.cos(a) * 0.024, 0.014 + Math.sin(a) * 0.024, -0.014, 0, 0, a);
       gpCyl(g, inner, 0.0055, 0.0055, 0.052, 8, Math.cos(a) * 0.013, 0.014 + Math.sin(a) * 0.013, -0.014);
     }
@@ -21529,7 +21530,7 @@ function buildSnubRevolver() {
   for (let i = 0; i < 3; i++) gpBox(g, inner, 0.038, 0.004, 0.024, 0, -0.024 - i * 0.018, 0.040 + i * 0.006, 0.26);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.022, -0.102); g.add(flash);
   g._flash = flash; g._kickZ = 0.024; g._greebled = true; g._handDetailed = true;
-  g._parts.main._chambers = 5;   // indexes one chamber a shot
+  g._parts.main._chambers = 6;   // indexes one chamber a shot
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
@@ -21752,8 +21753,16 @@ function buildAMR() {
   // Bullpup action: bolt handle behind the grip, ejection port beside it.
   gpBox(g, steel, 0.042, 0.038, 0.130, 0, 0.020, 0.110);
   gpBox(g, inner, 0.006, 0.026, 0.070, 0.022, 0.022, 0.100);
-  gpCyl(g, bright, 0.0075, 0.0075, 0.048, 10, 0.040, 0.026, 0.140, 0, Math.PI/2);
-  gpCyl(g, bright, 0.014, 0.014, 0.018, 10, 0.062, 0.026, 0.140, 0, Math.PI/2);  // bolt knob
+  gpPart(g,'main',()=>{
+    gpCyl(g, bright, 0.0075, 0.0075, 0.048, 10, 0.040, 0.026, 0.140, 0, Math.PI/2);
+    gpCyl(g, bright, 0.014, 0.014, 0.018, 10, 0.062, 0.026, 0.140, 0, Math.PI/2);
+  });
+  g._parts.main.userData.chargingHandle=true;
+  gpPart(g,'magazine',()=>{
+    gpBox(g,blued,.030,.075,.058,0,-.062,.125);
+    gpBox(g,inner,.033,.007,.062,0,-.100,.125);
+  },{x:0,y:-.025,z:.125});
+  g._anchorOverride={mag:{x:0,y:-.062,z:.125},breech:{x:.04,y:.026,z:.14}};
   // Barrel, fluting, and the side-baffle brake.
   gpCyl(g, blued, 0.0165, 0.0165, 0.290, 16, 0, 0.006, -0.320);
   for (let i = 0; i < 6; i++) {
@@ -29225,7 +29234,13 @@ function buildSRX() {
   gpBox(g, steel, 0.038, 0.058, 0.230, 0, 0.010, 0.010);                // receiver
   gpBox(g, inner, 0.039, 0.006, 0.210, 0, 0.038, 0.010);                // top flat (rail seam)
   gpBox(g, inner, 0.004, 0.020, 0.060, 0.020, 0.016, -0.030);           // ejection port
-  gpBox(g, bright, 0.012, 0.010, 0.026, 0.024, 0.028, -0.006);          // charging handle
+  gpPart(g,'main',()=>gpBox(g,bright,.012,.010,.026,.024,.028,-.006));
+  g._parts.main.userData.chargingHandle=true;
+  gpPart(g,'magazine',()=>{
+    gpBox(g,blued,.028,.070,.052,0,-.049,-.045);
+    gpBox(g,inner,.031,.007,.056,0,-.085,-.045);
+  },{x:0,y:-.018,z:-.045});
+  g._anchorOverride={mag:{x:0,y:-.049,z:-.045},breech:{x:.024,y:.028,z:-.006}};
 
   // ── Barrel: smooth, one gold band, plain tip rings (no fluting barcode) ──
   gpCyl(g, blued, 0.0068, 0.0068, 0.360, 20, 0, 0.016, -0.290);         // barrel
@@ -29431,7 +29446,8 @@ function buildPaintball() {
     b.position.set(((i % 3) - 1) * 0.026, 0.086 + Math.floor(i / 3) * 0.024, -0.010 + ((i % 2) - 0.5) * 0.030);
     g.add(b);
   }
-  gpBox(g, inner, 0.062, 0.008, 0.070, 0, 0.152, -0.010);           // hopper lid
+  gpPart(g,'main',()=>gpBox(g,inner,.062,.008,.070,0,.152,-.010),{x:0,y:.152,z:.025});
+  g._anchorOverride={breech:{x:0,y:.154,z:-.010}};
   // Ported barrel.
   gpCyl(g, anod, 0.0135, 0.0135, 0.240, 14, 0, 0.020, -0.190);
   for (let i = 0; i < 8; i++) {
@@ -30063,6 +30079,8 @@ function buildLeverRifle() {
   gpBox(g, blued, 0.030, 0.052, 0.150, 0, 0.010, 0.040);               // receiver
   gpBox(g, inner, 0.031, 0.008, 0.130, 0, 0.036, 0.040);               // top flat
   gpBox(g, inner, 0.004, 0.020, 0.040, 0.016, 0.012, 0.020);           // loading gate
+  g._feedGate=new THREE.Vector3(.019,.012,.020);
+  g._anchorOverride={mag:{x:.019,y:.012,z:.020}};
   gpCyl(g, bright, 0.0045, 0.0045, 0.006, 8, -0.016, 0.020, 0.060, 0, Math.PI/2); // saddle ring stud
   // Octagonal barrel over the tube magazine.
   gpCyl(g, blued, 0.0105, 0.0105, 0.320, 8, 0, 0.014, -0.196);
@@ -30078,11 +30096,13 @@ function buildLeverRifle() {
   ], 0.038, 0);
   gpBox(g, poly, 0.040, 0.056, 0.010, 0, -0.020, 0.304, 0.12);         // crescent butt plate
   gpBox(g, inner, 0.039, 0.004, 0.060, 0, 0.014, 0.234);               // comb seam
-  // The finger-loop lever, swept under the wrist.
-  gpBox(g, blued, 0.012, 0.014, 0.052, 0, -0.022, 0.062, 0.30);
-  gpBox(g, blued, 0.012, 0.044, 0.012, 0, -0.052, 0.088, 0.20);
-  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0042, 6, 14), blued);
-  loop.rotation.set(0, Math.PI/2, -0.25); loop.position.set(0, -0.070, 0.106); g.add(loop);
+  // The finger loop cycles as a connected lever after loading the tube.
+  gpPart(g,'main',()=>{
+    gpBox(g,blued,.012,.014,.052,0,-.022,.062,.30);
+    gpBox(g,blued,.012,.044,.012,0,-.052,.088,.20);
+    const loop=new THREE.Mesh(new THREE.TorusGeometry(.020,.0042,6,14),blued);
+    loop.rotation.set(0,Math.PI/2,-.25);loop.position.set(0,-.070,.106);g.add(loop);
+  },{x:0,y:-.022,z:.062});
   // Hammer, trigger, sights.
   gpBox(g, bright, 0.008, 0.016, 0.012, 0, 0.042, 0.104, -0.5);        // hammer spur
   gpBox(g, inner, 0.004, 0.006, 0.010, 0, 0.048, 0.108, -0.5);
@@ -30279,26 +30299,29 @@ function buildGrenadeLauncher() {
   const poly = GUN_MATS.polymer(), grip = GUN_MATS.grip(), inner = GUN_MATS.inner();
   gpBox(g, poly, 0.048, 0.056, 0.140, 0, 0.010, 0.086);             // receiver
   gpBox(g, inner, 0.049, 0.006, 0.120, 0, 0.036, 0.086);
-  // The drum: six chambers, each loaded, with a wound spring cover on the face.
-  // The drum opens upward to be loaded, and indexes one chamber per shot.
+  // Six open chamber sleeves swing out around a connected front hinge.
+  const chamberCenters=[];
   gpPart(g, 'main', () => {
-    gpCyl(g, steel, 0.060, 0.060, 0.130, 20, 0, 0.010, -0.020);
-    gpCyl(g, inner, 0.062, 0.062, 0.008, 20, 0, 0.010, -0.060);
-    gpCyl(g, inner, 0.062, 0.062, 0.008, 20, 0, 0.010, 0.020);
     const gren = new THREE.MeshPhongMaterial({ color: 0x6d6a3a, shininess: 54, specular: 0x9d9a68 });
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
-      const cx = Math.cos(a) * 0.036, cy = 0.010 + Math.sin(a) * 0.036;
-      gpCyl(g, inner, 0.0195, 0.0195, 0.134, 12, cx, cy, -0.020);
+      const cx = Math.cos(a) * 0.040, cy = 0.010 + Math.sin(a) * 0.040;
+      const sleeve=gpOpenMuzzle(g,.020,.0175,.130,cx,cy,-.020,steel,inner);
+      sleeve.remove(sleeve.children[sleeve.children.length-1]); // both ends stay open for loading
+      chamberCenters.push(new THREE.Vector3(cx,cy,-.020));
       gpPart(g, 'ammo', () => {                                       // revealed as it is loaded
-        gpCyl(g, gren, 0.0165, 0.0165, 0.030, 12, cx, cy, -0.076);    // grenade nose
-        gpCyl(g, bright, 0.0170, 0.0170, 0.006, 12, cx, cy, -0.090);
+        gpCyl(g, gren,.016,.016,.080,24,cx,cy,-.020);
+        gpCyl(g, gren,.010,.016,.024,24,cx,cy,-.072);
+        gpCyl(g, bright,.017,.017,.006,24,cx,cy,.023);
       });
     }
     gpCyl(g, bright, 0.0090, 0.0090, 0.140, 12, 0, 0.010, -0.020);    // axis pin
     gpCyl(g, blued, 0.030, 0.030, 0.020, 14, 0, 0.010, -0.098);       // spring cover
     for (let i = 0; i < 3; i++) gpBox(g, inner, 0.050, 0.006, 0.008, 0, 0.010, -0.096, 0, 0, i * 1.05);
-  }, { x: 0, y: 0.010, z: -0.020 });
+  }, { x: 0, y: .010, z: -.020 });
+  gpCyl(g,bright,.008,.008,.030,24,-.022,.010,-.095,0);
+  gpBox(g,steel,.030,.014,.028,-.013,.010,-.095);
+  g._loader={centers:chamberCenters.map(p=>p.sub(g._parts.main.position)),hinge:new THREE.Vector3(-.022,.010,-.095),round:null};
   // Short barrel out of the front, plus the frame that carries the drum.
   gpCyl(g, blued, 0.0230, 0.0230, 0.090, 14, 0, 0.010, -0.146);
   gpCyl(g, inner, 0.0180, 0.0180, 0.012, 12, 0, 0.010, -0.186);
@@ -30358,6 +30381,12 @@ function buildRailgun() {
     }
   });
   gpBox(g, inner, 0.014, 0.010, 0.140, 0, -0.026, 0.050);
+  gpPart(g,'magazine',()=>{
+    gpBox(g,poly,.027,.062,.044,0,-.054,-.010);
+    gpBox(g,glow,.028,.026,.006,0,-.055,.014);
+    gpBox(g,steel,.030,.006,.047,0,-.086,-.010);
+  },{x:0,y:-.024,z:-.010});
+  g._anchorOverride={mag:{x:0,y:-.054,z:-.010}};
   for (let i = 0; i < 6; i++) gpBox(g, glow, 0.010, 0.006, 0.014, 0, -0.022, -0.002 + i * 0.022);
   // Braided ground strap looping under the barrel back to the breech.
   for (let i = 0; i < 6; i++) {
@@ -48217,6 +48246,15 @@ function tryActiveReload() {
 // rise, and the round counts on that very beat), then the closing action.
 // Times are fractions of a FULL reload; lead + mag cycles + tail = 1.
 const SHELL_RELOAD = {
+  lever:{lead:.14,tail:.14,where:'mag',kind:'round',handFeed:true,
+    leadKeys:[[.9,{py:.03,rx:.10,rz:.85}]],
+    dip:{py:.03,rx:.10,rz:.85,hy:-.14,hx:.04},rise:{py:.03,rx:.10,rz:.85,hy:.01,hx:.02},
+    tailKeys:[[.18,{py:.03,rx:.10,rz:.70,arx:.50}], [.70,{py:.02,rx:.08,rz:.20,arx:0}], [.98,{}]],tailProps:[]},
+  grenade_launcher:{lead:.20,tail:.16,where:'mag',kind:'grenade',
+    leadKeys:[[.35,{py:.025,rx:.08,rz:.12,hx:-.02}], [.95,{py:.035,rx:.08,rz:.18,ary:-1.05}]],
+    dip:{py:.035,rx:.08,rz:.18,ary:-1.05,hy:-.16,hx:-.08,hz:.05},
+    rise:{py:.035,rx:.08,rz:.18,ary:-1.05,hy:.01,hx:-.06,hz:.02},
+    tailKeys:[[.15,{py:.035,rx:.08,rz:.18,ary:-1.05}], [.75,{py:.02,rx:.04,rz:.06,ary:0}], [.98,{}]],tailProps:[]},
   sg8: { lead: .10, tail: .15, where: 'mag',
     leadKeys: [[.8, { py:.03, rx:.13, rz:.34 }]],
     dip: { py:.03, rx:.13, rz:.34, hy:-.13, hz:.02 }, rise: { py:.04, rx:.15, rz:.36, hy:-.02, hz:.05 },
@@ -48253,13 +48291,15 @@ function _shellReloadPlan(id, mag, n) {
     const start = sp.lead + k * per;
     keys.push(K(T(start + per * 0.5), sp.dip));
     keys.push(K(T(start + per), sp.rise));
-    props.push(RP(T(start + per), 'shell', 'arrive', 1, sp.where));
+    props.push(RP(T(start + per), sp.kind || 'shell', 'arrive', 1, sp.where));
     loadAt.push(T(start + per));
   }
   const tail0 = sp.lead + n * per;
   for (const [u, pose] of sp.tailKeys) keys.push(K(T(tail0 + u * sp.tail), pose));
   for (const [u, k, m, c, w] of sp.tailProps) props.push(RP(T(tail0 + u * sp.tail), k, m, c, w));
-  return { frac: total, keys, props, loadAt };
+  return { frac: total, keys, props, loadAt,handLoaded:id==='grenade_launcher',handFeed:!!sp.handFeed,feedKind:sp.kind,
+    openAt:T(sp.lead*.95),latchAt:T(tail0+sp.tail*.75),
+    cycleStarts:loadAt.map((_,k)=>T(sp.lead+k*per)) };
 }
 
 // A shell gun's skin that brings its own reload used to play that reload whole,
@@ -48318,6 +48358,11 @@ function _shellPlanFor(weapon, n) {
   return (fx && fx.reload && _skinShellPlan(fx.reload, weapon.id, weapon.mag, n))
       || _shellReloadPlan(weapon.id, weapon.mag, n);
 }
+function _hopperReloadPlan(weapon,n) {
+  if(weapon.id!=='paintball'||_skinFxFor(weapon.id)?.reload)return null;
+  const loadAt=Array.from({length:n},(_,i)=>.34+i*.35/Math.max(1,n-1));
+  return {frac:1,keys:RELOAD_KEYS.paintball,props:loadAt.map(t=>RP(t,'ball','arrive',1,'breech')),loadAt};
+}
 
 function cancelReload() {
   if (!reloading) return;
@@ -48346,7 +48391,11 @@ function startReload() {
   const missing = Math.min(reloadWeapon.mag - pool.ammo, pool.reserve);
   // A shell gun's reload is as long as the shells it is short of, and its
   // animation, sound and ammo count all run off one plan built for that number.
-  const plan = shellStyle ? _shellPlanFor(reloadWeapon, missing) : null;
+  const plan = shellStyle ? _shellPlanFor(reloadWeapon, missing) : _hopperReloadPlan(reloadWeapon,missing);
+  if(plan&&plan.handLoaded){
+    plan.handLoaded=!!weaponModels[reloadIdx]?._loader;
+    plan.initialAmmo=pool.ammo;
+  }
   const dur = reloadWeapon.reloadTime * speed * (plan ? plan.frac : 1);
   // After dur, not before: the whole sequence is scheduled against the real
   // length of this reload, so adrenaline halving it moves every beat with it.
@@ -48774,8 +48823,9 @@ function _buildMech(model, id, evs) {
   if (!A || !w || model._throwable) return null;
   const P = _mechPartsOf(model);
   const M = { kick: 0, kickAt: performance.now() };
-  // ── magazine
-  if (evs.some(e => e.k === 'mag' && e.m === 'eject')) {
+  // Explicit assemblies also support removable energy packs.
+  const packKind=evs.find(e=>e.m==='eject'&&(e.k==='mag'||model._parts?.magazine&&['cell','battery','canister'].includes(e.k)))?.k;
+  if (packKind) {
     const explicit=model._parts?.magazine;
     const cand = explicit?[]:P.filter(p => {
       const c = p.box.getCenter(new THREE.Vector3()), sz = p.box.getSize(new THREE.Vector3());
@@ -48784,7 +48834,7 @@ function _buildMech(model, id, evs) {
         && c.y <= A.mag.y + 0.05 && p.box.max.y <= A.mag.y + 0.075 && p.box.min.y <= A.mag.y + 0.02
         && sz.z <= 0.10 && sz.y <= 0.20;
     });
-    if(explicit)M.mag={g:explicit,home:explicit.position.clone(),n:explicit.children.length};
+    if(explicit)M.mag={g:explicit,home:explicit.position.clone(),n:explicit.children.length,kind:packKind};
     else if (cand.length) {
       const u = new THREE.Box3(); cand.forEach(p => u.union(p.box));
       if (u.max.y - u.min.y >= 0.05 && u.min.y < A.mag.y + 0.005) {
@@ -48887,7 +48937,7 @@ function updateGunMech(model, id, tR, evs, durMs) {
   if (M.mag) {
     let vis = true, k = 1;
     if (tR != null) {
-      const out = beat('mag', 'eject')[0], inn = beat('mag', 'arrive')[0];
+      const kind=M.mag.kind||'mag',out = beat(kind, 'eject')[0], inn = beat(kind, 'arrive')[0];
       if (out && tR >= out.t) {
         vis = false;
         if (inn && tR >= inn.t - 0.02) { k = _eqSm((tR - (inn.t - 0.02)) * durMs / 300); vis = true; }
@@ -53374,7 +53424,7 @@ const RELOAD_PROPS = {
   signal_pistol:[RP(.46,'shell',null,1,'breech'),RP(.70,'shell','arrive',1,'breech')],
   flare:[RP(.50,'case'),RP(.62,'round','arrive',1,'breech')],
   taser:[RP(.38,'case'),RP(.65,'mag','arrive',1,'breech')],
-  duelist_pistol:[RP(.31,'ball','arrive',1,'muzzle'),RP(.53,'ball','arrive',1,'muzzle'),RP(.83,'case',null,1,'breech')],
+  duelist_pistol:[RP(.53,'ball','arrive',1,'muzzle')],
   // ── Revolvers: cases punched out together, fresh rounds thumbed in ───────
   revolver:[RP(.38,'case',null,6,'breech'),RP(.62,'round','arrive',6,'breech')],
   snub_revolver:[RP(.44,'case',null,5,'breech'),RP(.68,'round','arrive',5,'breech')],
@@ -53425,7 +53475,7 @@ const RELOAD_PROPS = {
   gravity_paint:[RP(.33,'bottle',null,1,'breech'),RP(.55,'bottle','arrive',1,'breech')],
   storm_cannon:[RP(.33,'bottle',null,1,'breech'),RP(.57,'bottle','arrive',1,'breech')],
   glassmaker:[RP(.35,'ball','arrive',6,'breech'),RP(.57,'ball','arrive',5,'breech')],
-  paintball:[RP(.33,'ball','arrive',6,'breech'),RP(.53,'ball','arrive',6,'breech'),RP(.69,'ball','arrive',5,'breech')],
+  paintball:Array.from({length:16},(_,i)=>RP(.34+i*.023,'ball','arrive',1,'breech')),
   sticker_blaster:[RP(.35,'mag',null,1,'breech'),RP(.58,'mag','arrive',1,'breech')],
   traffic_controller:[RP(.35,'cell',null,1,'breech'),RP(.58,'cell','arrive',1,'breech')],
   // ── Thrown: the next one is drawn from the belt ──────────────────────────
@@ -53547,6 +53597,8 @@ function _variant(track, o) {
     hy: k.hy * a, hz: k.hz * a, py: k.py + (o.lift || 0), rx: k.rx + (o.tip || 0) })));
 }
 const _MAG_STYLES = {
+  srx: {out:.29,in:.59,rx:.22,rz:.24,fetch:-.22,side:-.08,fin:'rack',seat:'rock'},
+  amr: {out:.30,in:.62,rx:.20,rz:.30,fetch:-.24,side:-.10,fin:'bolt',seat:'press'},
   // tactical roll: canted hard, dumps and fetches in one quick sweep, release on the way up
   xm7:            { out: .26, in: .50, rx: .22, rz: .10, cant: .55, lift: .01, fetch: -.20, side: -.10, fin: 'release', seat: 'rock' },
   // triple-tap: seats the mag then taps it home twice
@@ -53587,6 +53639,8 @@ for (const id in _MAG_STYLES) {
 }
 // ── Not magazine guns: each its own trick ───────────────────────────────────
 Object.assign(_STYLE_RK, {
+  railgun:_magTrack({out:.30,in:.69,rx:.18,rz:-.32,fetch:-.20,side:.07,fin:'release',seat:'press'}),
+  paintball:RELOAD_KEYS.paintball.map(k=>K(k.t,{...k,arx:k.t<.22?1.05*k.t/.22:k.t<.78?1.05:1.05*Math.max(0,(.94-k.t)/.16)})),
   // mounted gun: both arms, big movements
   gau19: _variant(RELOAD_KEYS.gau19, { amp: 1.35, lift: .015 }),
   // chain gun: lid, then straight in
@@ -53637,9 +53691,10 @@ Object.assign(_STYLE_RK, {
     K(.85,{py:.09,rx:.20,rz:.30,hy:.03,hz:-.04}), K(.94,{py:.03,rx:.12,rz:.20})],
 });
 Object.assign(_STYLE_RP, {
+  railgun:[RP(.30,'cell'),RP(.60,'cell','arrive')],
   gau19:  [RP(.30,'canister',null,1,'breech'), RP(.54,'canister','arrive',1,'breech'), RP(.30,'link',null,5,'breech')],
   mk44:   [RP(.28,'link',null,5,'breech'), RP(.51,'link','arrive',3,'breech'), RP(.80,'case',null,2,'breech'), RP(.88,'case',null,1,'breech')],
-  snub_revolver: [RP(.44,'case',null,5,'breech'), RP(.62,'round','arrive',5,'breech')],
+  snub_revolver: [RP(.44,'case',null,6,'breech'), RP(.62,'round','arrive',6,'breech')],
   auto_revolver: [RP(.38,'clip',null,1,'breech'), RP(.58,'clip','arrive',1,'breech')],
   machine_revolver: [RP(.36,'drum',null,1,'breech'), RP(.56,'drum','arrive',1,'breech')],
   gunslinger: [RP(.40,'case',null,6,'breech'), RP(.62,'round','arrive',6,'breech')],
@@ -54452,6 +54507,86 @@ function _reloadPose(track, t) {
            av:L('av') };
 }
 
+function poseReloadElbow(hand,reach) {
+  for(const arm of hand.children)if(arm.userData.vmForearm){
+    arm.userData.reloadArmHome ||= arm.quaternion.clone();
+    const direction=new THREE.Vector3(-.9,-1.5,.35).normalize().applyQuaternion(hand.quaternion.clone().invert());
+    const target=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),direction);
+    arm.quaternion.copy(arm.userData.reloadArmHome).slerp(target,reach);
+  }
+}
+function updateHandLoadedLauncher(model,t,plan,H,pose) {
+  const loader=model._loader,main=model._parts.main;
+  main.position.copy(main._home).sub(loader.hinge).applyAxisAngle(new THREE.Vector3(0,1,0),pose.ary).add(loader.hinge);
+  syncHeldAmmoModelForIndex(currentWeaponIdx);
+  if(!H||H.single)return;
+  const ammoParts=model._parts.ammo.children,per=ammoParts.length/6;
+  if(!loader.round){
+    const round=new THREE.Group();round.userData.eqFx=true;round.visible=false;
+    const center=loader.centers[0].clone().add(main._home);
+    for(let i=0;i<per;i++){
+      const part=ammoParts[i].clone();part.position.sub(center);part.visible=true;part.userData.eqFx=true;round.add(part);
+    }
+    loader.round=round;model.add(round);
+  }
+  const round=loader.round;round.visible=false;
+  const axis=new THREE.Vector3(0,0,1).applyQuaternion(main.quaternion);
+  const holdOffset=new THREE.Vector3(-.015,-.025,.058).applyQuaternion(main.quaternion);
+  const heldRotation=main.quaternion.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(.12,0,-.25)));
+  const slotPoint=slot=>loader.centers[Math.min(5,slot)].clone().applyQuaternion(main.quaternion).add(main.position);
+  const stash=H.frontHome.clone().add(new THREE.Vector3(-.025,-.16,.025));
+  const last=plan.loadAt.at(-1),first=plan.cycleStarts[0];
+  if(t<first)return;
+  if(t>=last){
+    const withdraw=_eqSm((t-last)/.065);
+    H.front.position.copy(slotPoint(plan.initialAmmo+plan.loadAt.length-1)).add(holdOffset).lerp(H.frontHome,withdraw);
+    H.front.quaternion.copy(heldRotation).slerp(new THREE.Quaternion().setFromEuler(H.frontRot),withdraw);
+    poseReloadElbow(H.front,1-withdraw);return;
+  }
+  const cycle=plan.loadAt.findIndex(end=>t<end),start=plan.cycleStarts[cycle],end=plan.loadAt[cycle];
+  const phase=Math.max(0,Math.min(1,(t-start)/(end-start)));
+  const seat=slotPoint(plan.initialAmmo+cycle),entry=seat.clone().addScaledVector(axis,.105);
+  let handPoint;
+  if(phase<.25){
+    const previous=cycle?slotPoint(plan.initialAmmo+cycle-1).add(holdOffset):H.frontHome.clone();
+    handPoint=previous.lerp(stash.clone().add(holdOffset),_eqSm(phase/.25));
+  }else{
+    round.visible=true;round.quaternion.copy(main.quaternion);
+    if(phase<.65)round.position.copy(stash).lerp(entry,_eqSm((phase-.25)/.4));
+    else round.position.copy(entry).lerp(seat,_eqSm((phase-.65)/.35));
+    handPoint=round.position.clone().add(holdOffset);
+  }
+  H.front.position.copy(handPoint);
+  H.front.quaternion.setFromEuler(H.frontRot).slerp(heldRotation,cycle?1:_eqSm(phase/.25));
+  poseReloadElbow(H.front,1);
+}
+function updateHandFedRounds(model,t,plan,H) {
+  if(!H||H.single)return;
+  model._feedRound ||= _makeReloadProp(plan.feedKind);
+  const round=model._feedRound;
+  if(!round.parent){round.userData.eqFx=true;model.add(round);}
+  round.visible=false;
+  const first=plan.cycleStarts[0],last=plan.loadAt.at(-1),offset=new THREE.Vector3(.025,-.012,.010);
+  const seat=model._feedGate.clone().add(new THREE.Vector3(.010,0,0));
+  const heldRotation=new THREE.Quaternion().setFromEuler(new THREE.Euler(.12,Math.PI/2,-.25));
+  if(t<first)return;
+  if(t>=last){
+    const withdraw=_eqSm((t-last)/.065);
+    H.front.position.copy(seat).add(offset).lerp(H.frontHome,withdraw);
+    H.front.quaternion.copy(heldRotation).slerp(new THREE.Quaternion().setFromEuler(H.frontRot),withdraw);
+    poseReloadElbow(H.front,1-withdraw);return;
+  }
+  const k=plan.loadAt.findIndex(end=>t<end),phase=(t-plan.cycleStarts[k])/(plan.loadAt[k]-plan.cycleStarts[k]);
+  const stash=H.frontHome.clone().add(new THREE.Vector3(-.025,-.14,.025)),entry=seat.clone().add(new THREE.Vector3(.08,0,0));
+  if(phase<.25)H.front.position.copy(k?seat.clone().add(offset):H.frontHome).lerp(stash.clone().add(offset),_eqSm(phase/.25));
+  else{
+    round.visible=true;round.rotation.set(0,Math.PI/2,0);
+    if(phase<.65)round.position.copy(stash).lerp(entry,_eqSm((phase-.25)/.4));
+    else round.position.copy(entry).lerp(seat,_eqSm((phase-.65)/.35));
+    H.front.position.copy(round.position).add(offset);
+  }
+  H.front.quaternion.setFromEuler(H.frontRot).slerp(heldRotation,k?1:_eqSm(phase/.25));poseReloadElbow(H.front,1);
+}
 function updateReloadAnim() {
   const model = weaponModels[currentWeaponIdx];
   updateActiveReloadHUD();
@@ -54464,6 +54599,8 @@ function updateReloadAnim() {
   }
   const H = model._hands;
   const rest = () => {
+    if(model._loader?.round)model._loader.round.visible=false;
+    if(model._feedRound)model._feedRound.visible=false;
     if (model._homePos) model.position.copy(model._homePos);
     else model.position.set(0.12, -0.1, -0.25);
     model.rotation.set(0, 0, 0);
@@ -54530,11 +54667,13 @@ function updateReloadAnim() {
     if (model._propFired & (1 << i)) continue;
     if (t < evs[i].t) continue;
     model._propFired |= (1 << i);
+    if(plan?.handLoaded&&evs[i].k==='grenade'&&evs[i].m==='arrive')continue;
+    if(plan?.handFeed&&evs[i].k===plan.feedKind&&evs[i].m==='arrive')continue;
     {   // the part going in knocks the gun; the part coming out only eases it
       const heavy = /^(mag|clip|cell|canister|drum|rocket|battery|bottle)$/.test(evs[i].k);
       model._kick = { t0: Date.now(), a: (evs[i].m === 'arrive' ? 1 : .5) * (heavy ? 1 : .3) };
     }
-    if (evs[i].k === 'mag' && evs[i].m === 'arrive' && model._mech && model._mech.mag) continue;   // the gun's own magazine slides in instead
+    if (evs[i].k === (model._mech?.mag?.kind||'mag') && evs[i].m === 'arrive' && model._mech?.mag) continue;
     for (let n = 0; n < evs[i].n; n++) {
       try { spawnReloadProp(model, evs[i].dust ? 'ash' : evs[i].k, evs[i].m, evs[i].w, magic ? { tint: magic.tint } : undefined); } catch (e) {}
     }
@@ -54568,6 +54707,10 @@ function updateReloadAnim() {
     // Reloading while aiming: the hands still work, but the gun is held level and near the centre line
     // rather than swung across the body, so the sights and the ring stay readable.
     P.rx *= 0.3; P.ry *= 0.15; P.rz *= 0.15; P.px *= 0.2; P.pz *= 0.3; P.py *= 0.5;
+  }
+  if(!inspecting&&plan?.handFeed){
+    const working=_eqSm(t/.12)*(1-_eqSm((t-.88)/.12));
+    P.px-=(window.innerWidth/window.innerHeight<.8?.10:.04)*working;
   }
   const home = model._homePos;
   model.position.set(home.x + P.px, home.y + P.py, home.z + P.pz);
@@ -54613,14 +54756,12 @@ function updateReloadAnim() {
       H.front.rotation.z+=(H.frontRot.z-.35-H.front.rotation.z)*reach;
       // Drop the elbow below the view while the wrist reaches up. Moving the
       // old forearm unchanged here would send it back through the camera.
-      for(const arm of H.front.children)if(arm.userData.vmForearm){
-        arm.userData.reloadArmHome ||= arm.quaternion.clone();
-        const direction=new THREE.Vector3(-.9,-1.5,.35).normalize().applyQuaternion(H.front.quaternion.clone().invert());
-        const target=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),direction);
-        arm.quaternion.copy(arm.userData.reloadArmHome).slerp(target,reach);
-      }
+      poseReloadElbow(H.front,reach);
     }
   }
+  if(!inspecting&&!skinReload&&!magic&&plan?.handLoaded&&model._loader)updateHandLoadedLauncher(model,t,plan,H,P);
+  if(!inspecting&&!skinReload&&!magic&&plan?.handFeed&&model._feedGate)updateHandFedRounds(model,t,plan,H);
+  if(id==='paintball'&&H&&!H.single&&!inspecting&&!skinReload&&!magic)poseReloadElbow(H.front,Math.sin(Math.PI*t));
   if (secretTrack) finishSecretInspectPose(model, t, P);
 }
 

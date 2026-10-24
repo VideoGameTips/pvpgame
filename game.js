@@ -20669,6 +20669,44 @@ function gpCyl(g, mat, r1, r2, h, seg, x, y, z, rx = Math.PI / 2, rz = 0) {
   m.position.set(x, y, z); m.rotation.set(rx, 0, rz);
   m.castShadow = true; g.add(m); return m;
 }
+function gpFinish(color, roughness, metalness, kind) {
+  const material=new THREE.MeshStandardMaterial({color,roughness,metalness});
+  material.userData.weaponMaterial=kind;material.userData.metalDone=true;
+  material.userData.finishVariant=roughness+'|'+metalness;
+  return material;
+}
+function gpContouredPart(g,mat,pts,width,x=0,radius=.007) {
+  const shape=new THREE.Shape();
+  pts.forEach((p,i)=>{
+    const prev=pts[(i+pts.length-1)%pts.length],next=pts[(i+1)%pts.length];
+    const a=Math.min(.3,radius/Math.hypot(prev[0]-p[0],prev[1]-p[1]));
+    const b=Math.min(.3,radius/Math.hypot(next[0]-p[0],next[1]-p[1]));
+    const start=[p[0]+(prev[0]-p[0])*a,p[1]+(prev[1]-p[1])*a];
+    if(i===0)shape.moveTo(...start);else shape.lineTo(...start);
+    shape.quadraticCurveTo(p[0],p[1],p[0]+(next[0]-p[0])*b,p[1]+(next[1]-p[1])*b);
+  });
+  shape.closePath();
+  const geometry=new THREE.ExtrudeGeometry(shape,{depth:width,bevelEnabled:true,
+    bevelSize:Math.min(.0016,width*.15),bevelThickness:Math.min(.0016,width*.15),bevelSegments:3,curveSegments:8});
+  geometry.rotateY(-Math.PI/2);geometry.translate(x+width/2,0,0);smoothManufacturedBevels(geometry);
+  const mesh=new THREE.Mesh(geometry,mat);mesh.castShadow=true;mesh.userData.contouredFurniture=true;g.add(mesh);return mesh;
+}
+function gpOpenMuzzle(g,outer,inner,length,x,y,z,metal,dark,slotted=false) {
+  const group=new THREE.Group();group.position.set(x,y,z);group.userData.openMuzzle=true;
+  const section=(start,end,angle=0,arc=Math.PI*2)=>{
+    const profile=[[inner,start],[outer,start],[outer,end],[inner,end],[inner,start]].map(p=>new THREE.Vector2(...p));
+    const geo=new THREE.LatheGeometry(profile,slotted&&arc<Math.PI*2?8:40,angle,arc);
+    const mesh=new THREE.Mesh(geo,metal);mesh.rotation.x=Math.PI/2;mesh.userData.noSmooth=true;group.add(mesh);
+  };
+  if(slotted){
+    section(-length/2,-length/2+.007);section(length/2-.007,length/2);
+    for(let i=0;i<6;i++)section(-length/2+.007,length/2-.007,i*Math.PI/3,Math.PI/3*.64);
+  }else section(-length/2,length/2);
+  // The dark end sits behind a real bore, never as a painted disc on the muzzle face.
+  const shadow=new THREE.Mesh(new THREE.CircleGeometry(inner,40),dark);
+  shadow.rotation.y=Math.PI;shadow.position.z=-length/2+Math.min(inner*2.2,length*.75);shadow.userData.noSmooth=true;group.add(shadow);
+  g.add(group);return group;
+}
 function gpOptic(g, x, y, z, length, radius, deckY) {
   const optic = new THREE.Group();optic.position.set(x,y,z);optic.userData.weaponOptic=true;
   const shell=new THREE.MeshPhongMaterial({color:0x222931,shininess:95,specular:0x9bacbb});
@@ -23963,12 +24001,12 @@ function buildAK20() {
   // 🔫 AK-20, black furniture. Keep the AK silhouette, but make every attachment
   // visibly socket into a larger part: magwell sleeve, stock hinge, handguard
   // collars, and real sights instead of tiny blocks floating on the spine.
-  const steel   = new THREE.MeshPhongMaterial({ color: 0x3a3f47, shininess: 105, specular: 0xb2bcc7 });
-  const blued   = new THREE.MeshPhongMaterial({ color: 0x454b53, shininess: 140, specular: 0xd2dbe4 });
-  const bright  = new THREE.MeshPhongMaterial({ color: 0x8d959d, shininess: 150, specular: 0xdfe6ee });
-  const polymer = new THREE.MeshPhongMaterial({ color: 0x2b2f35, shininess: 40,  specular: 0x5e646c });
-  const grip    = new THREE.MeshPhongMaterial({ color: 0x272b30, shininess: 30,  specular: 0x4a5057 });
-  const magMat  = new THREE.MeshPhongMaterial({ color: 0x32373d, shininess: 66,  specular: 0x8d959e });
+  const steel   = gpFinish(0x3a424b,.4,.78,'steel');
+  const blued   = gpFinish(0x343e48,.29,.88,'steel');
+  const bright  = gpFinish(0x8d959d,.18,.93,'steel');
+  const polymer = gpFinish(0x292e34,.65,.02,'polymer');
+  const grip    = gpFinish(0x20252a,.79,0,'polymer');
+  const magMat  = gpFinish(0x32373d,.47,.65,'steel');
   const stripe  = new THREE.MeshPhongMaterial({ color: 0x79838d, shininess: 70,  specular: 0xb0bac4 });
   const inner   = new THREE.MeshPhongMaterial({ color: 0x121417, shininess: 20,  specular: 0x2a2d31 });
 
@@ -24005,7 +24043,7 @@ function buildAK20() {
   box(steel, 0.048, 0.100, 0.320, 0, 0.005, -0.010);                 // receiver
   box(steel, 0.050, 0.025, 0.080, 0, -0.044, -0.056);                 // magwell sleeve: magazine grows out of this, not a thread
   box(inner, 0.044, 0.014, 0.080, 0, 0.053, -0.060);                 // dust cover / ejection port
-  box(bright, 0.006, 0.052, 0.010, 0.028, 0.014, 0.010, 0, 0, 0.20);  // selector lever
+  cyl(bright,.0035,.0035,.003,20,.028,.014,.026,0,Math.PI/2); // selector pivot
 
   // Rivals-style flank markings: long top stripe, split middle stripe, long low
   // stripe on both sides. They are sunk into the receiver faces so they read as
@@ -24033,14 +24071,14 @@ function buildAK20() {
 
   // Magazine: still curved, but the top segment is buried inside the magwell so
   // it reads as locked in, not pinched on by a tiny edge.
-  let my = -0.056, mz = -0.060, ang = 0.10;
-  for (let i = 0; i < 5; i++) {
-    box(magMat, 0.030, 0.034, 0.048, 0, my, mz, ang);
-    my -= Math.cos(ang) * 0.028;
-    mz -= Math.sin(ang) * 0.028;
-    ang += 0.085;
+  gpContouredPart(g,magMat,[[-.034,-.044],[-.084,-.044],[-.089,-.092],[-.101,-.143],
+    [-.121,-.190],[-.074,-.211],[-.056,-.166],[-.042,-.112]],.030);
+  for(const side of [-1,1]){
+    for(const offset of [0,.014])gpContouredPart(g,blued,[[-.055-offset,-.077],[-.058-offset,-.116],
+      [-.072-offset,-.165],[-.076-offset,-.175],[-.079-offset,-.172],[-.063-offset,-.115],[-.059-offset,-.077]],.001,side*.0168,.002);
+    box(inner,.0008,.007,.026,side*.017,-.191,-.095,0.38);
   }
-  box(magMat, 0.032, 0.012, 0.050, 0, my + 0.012, mz - 0.004, ang);  // floorplate
+  box(blued,.034,.009,.052,0,-.198,-.097,.38); // fitted magazine floorplate
 
   // Pistol grip: ONE piece, the cap flared into the same outline instead of a
   // second box stuck on the bottom at its own angle (which is exactly the
@@ -24048,7 +24086,7 @@ function buildAK20() {
   // Still reaches the receiver and runs far enough past the firing hand to
   // read as a handle.
   box(grip, 0.040, 0.026, 0.052, 0, -0.046, 0.058, 0.16);            // grip tang under receiver
-  sidePlate(grip, [
+  gpContouredPart(g,grip, [
     [0.078,-0.038],[0.114,-0.064],[0.124,-0.148],[0.130,-0.172],[0.106,-0.184],
     [0.070,-0.180],[0.056,-0.148],[0.068,-0.088],[0.062,-0.044],
   ], 0.038, 0);
@@ -24057,11 +24095,14 @@ function buildAK20() {
   // plates (a "bridge" bolted to a "stock") that read as floating apart from
   // each other where they met. Same silhouette, one continuous outline now.
   box(steel, 0.054, 0.070, 0.026, 0, 0.000, 0.144);                 // stock hinge block
-  sidePlate(polymer, [
+  gpContouredPart(g,polymer, [
     [0.142,0.052],[0.170,0.042],[0.200,0.024],[0.222,0.011],
     [0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],[0.142,-0.046],
   ], 0.047, 0);
-  box(inner, 0.048, 0.052, 0.008, 0, -0.002, 0.404, 0.10);           // butt plate
+  gpContouredPart(g,grip,[[.382,.002],[.399,.002],[.408,-.012],[.401,-.037],[.381,-.035]],.050,0,.004);
+  gpContouredPart(g,grip,[[.224,.010],[.240,.026],[.320,.029],[.356,.012],[.330,.006],[.236,.004]],.048,0,.008);
+  for(let i=0;i<4;i++)box(inner,.051,.002,.003,0,-.008-i*.007,.402);
+  for(const side of [-1,1])for(let i=0;i<3;i++)box(polymer,.001,.003,.028,side*.0205,-.105-i*.018,.092+i*.003,.15);
 
   // Handguard, one piece covering the gas tube instead of stacked halves.
   box(steel, 0.052, 0.070, 0.026, 0, 0.018, -0.166);                 // rear handguard collar
@@ -24078,8 +24119,14 @@ function buildAK20() {
   const frontHood = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0024, 7, 14), steel);
   frontHood.position.set(0, 0.063, -0.505); frontHood.castShadow = true; g.add(frontHood);
   box(bright, 0.0035, 0.024, 0.0035, 0, 0.058, -0.505);              // post
-  const brake = cyl(steel, 0.0118, 0.0104, 0.046, 18, 0, 0.018, -0.556);
-  brake.rotation.x = Math.PI / 2 - 0.13;
+  const brake = gpOpenMuzzle(g,.0118,.0056,.046,0,.018,-.556,blued,inner,true);
+  brake.rotation.x = -0.13;
+  // Right-side operating controls and restrained wear at exposed edges.
+  box(inner,.001,.016,.055,.0257,.023,-.048);
+  box(bright,.0015,.007,.034,.0263,.024,-.044);
+  box(blued,.004,.008,.030,.028,.014,.010,0,0,.20);
+  for(let i=0;i<3;i++)box(stripe,.0008,.001,.005,.0272,.027-i*.012,.027+i*.003);
+  for(const side of [-1,1])for(let i=0;i<3;i++)box(stripe,.0005,.0006,.007,side*.0256,.051,-.13+i*.058);
 
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.585); g.add(flash);
   g._flash = flash; g._kickZ = 0.015;
@@ -29494,23 +29541,29 @@ function buildPistol() {
   // 🔫 M1911-pattern: slide with cocking serrations, ejection port, beavertail,
   // hammer, thumb safety, checkered grip panels.
   const g = new THREE.Group();
-  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
-  const grip = GUN_MATS.wood(), inner = GUN_MATS.inner();
+  const steel=gpFinish(0x3a424b,.43,.78,'steel'),blued=gpFinish(0x343e48,.31,.86,'steel');
+  const bright=gpFinish(0x8d959d,.17,.93,'steel'),grip=gpFinish(0x20262b,.76,0,'polymer');
+  const inner=GUN_MATS.inner();
   gpBox(g, blued, 0.026, 0.030, 0.150, 0, 0.020, -0.040);              // slide
   gpBox(g, inner, 0.027, 0.006, 0.120, 0, 0.036, -0.044);              // slide top flat
   for (let i = 0; i < 6; i++) gpBox(g, inner, 0.027, 0.020, 0.0035, 0, 0.020, 0.014 - i * 0.007); // serrations
   gpBox(g, inner, 0.005, 0.014, 0.044, 0.013, 0.026, -0.056);          // ejection port
   gpBox(g, steel, 0.024, 0.026, 0.100, 0, -0.004, -0.020);             // frame
-  gpCyl(g, bright, 0.0062, 0.0062, 0.020, 14, 0, 0.020, -0.116);       // barrel bushing
-  gpCyl(g, inner, 0.0042, 0.0042, 0.012, 12, 0, 0.020, -0.122);        // bore
+  gpOpenMuzzle(g,.0062,.0042,.020,0,.020,-.116,bright,inner);
   gpCyl(g, bright, 0.0038, 0.0038, 0.030, 10, 0, 0.004, -0.110);       // recoil spring plug
-  // Grip: frame plate plus checkered panels either side.
-  gpPlate(g, steel, [[0.030,-0.014],[0.052,-0.036],[0.056,-0.104],[0.030,-0.112],[0.014,-0.052],[0.012,-0.018]], 0.026, 0);
+  // Curved backstrap and palm swell, with inset matte panels and flush screws.
+  gpContouredPart(g,steel,[[.030,-.014],[.047,-.025],[.051,-.048],[.057,-.076],[.056,-.103],
+    [.047,-.112],[.030,-.112],[.020,-.086],[.014,-.052],[.012,-.018]],.026,0,.008);
   [-0.014, 0.014].forEach(x => {
-    const panel = gpBox(g, grip, 0.004, 0.060, 0.028, x, -0.062, 0.034, 0.30);
-    for (let i = 0; i < 4; i++) gpBox(g, inner, 0.005, 0.0025, 0.026, x, -0.042 - i * 0.014, 0.038 - i * 0.004, 0.30);
+    gpContouredPart(g,grip,[[.030,-.033],[.044,-.038],[.048,-.064],[.047,-.094],
+      [.034,-.098],[.025,-.072],[.022,-.048]],.004,x,.005);
+    for(let i=0;i<5;i++)gpBox(g,inner,.0008,.001,.015,Math.sign(x)*.0173,-.048-i*.008,.034+i*.001,.15);
+    for(const [y,z] of [[-.043,.034],[-.088,.039]])gpCyl(g,blued,.0022,.0022,.0014,20,Math.sign(x)*.017,y,z,0,Math.PI/2);
   });
-  gpBox(g, blued, 0.020, 0.012, 0.026, 0, -0.100, 0.028, 0.30);        // magwell floor
+  gpPart(g,'magazine',()=>{
+    gpBox(g,blued,.018,.065,.020,0,-.078,.035,-.20);
+    gpBox(g,blued,.024,.007,.026,0,-.112,.042,-.20);
+  },{x:0,y:-.045,z:.028});
   // Fire control + rear furniture.
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.003, 6, 12, Math.PI * 1.05), steel);
   guard.rotation.set(0, Math.PI/2, -0.35); guard.position.set(0, -0.026, 0.000); g.add(guard);
@@ -29519,10 +29572,16 @@ function buildPistol() {
   gpBox(g, bright, 0.006, 0.014, 0.008, 0, 0.042, 0.044, -0.4);        // hammer
   gpBox(g, bright, 0.005, 0.006, 0.020, 0.013, 0.012, 0.026);          // thumb safety
   gpBox(g, bright, 0.004, 0.008, 0.010, 0.013, 0.014, -0.012);         // slide stop
+  gpBox(g,inner,.0008,.003,.040,.015,.024,-.055);
+  gpBox(g,bright,.0012,.005,.026,.0156,.026,-.054); // visible chamber hood
+  gpCyl(g,blued,.0025,.0025,.002,20,-.014,-.020,.020,0,Math.PI/2); // magazine release
+  gpBox(g,inner,.0006,.001,.022,-.017,-.095,.038,.30); // floorplate seam
+  for(const side of [-1,1])for(let i=0;i<3;i++)gpBox(g,bright,.0004,.0005,.006,side*.0144,.032,-.089+i*.018);
   gpBox(g, inner, 0.010, 0.008, 0.006, 0, 0.040, 0.026);               // rear sight
   gpBox(g, bright, 0.004, 0.007, 0.004, 0, 0.040, -0.104);             // front sight
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.135); g.add(flash);
   g._flash = flash; g._kickZ = 0.018; g._greebled = true; g._handDetailed = true;
+  g._anchorOverride={mag:{x:0,y:-.078,z:.035},breech:{x:.014,y:.026,z:-.054}};
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
@@ -35998,7 +36057,8 @@ function _fuseModel(root) {
     if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
     const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld), sz = b.getSize(new THREE.Vector3());
     const hsl = { h: 0, s: 0, l: 0 }; m.color.getHSL(hsl);
-    const finish=m.userData.weaponMaterial || (m.isMeshStandardMaterial ? (m.metalness>.45?'steel':'polymer') : (m.shininess>=65?'steel':'polymer'));
+    const role=m.userData.weaponMaterial || (m.isMeshStandardMaterial ? (m.metalness>.45?'steel':'polymer') : (m.shininess>=65?'steel':'polymer'));
+    const finish=role+'|'+(m.userData.finishVariant||'');
     parts.push({ o, b: b.expandByScalar(0.004), vol: sz.x * sz.y * sz.z, hsl, finish });
   });
   const n = parts.length; if (n < 2) return root;
@@ -48642,14 +48702,16 @@ function _buildMech(model, id, evs) {
   const M = { kick: 0, kickAt: performance.now() };
   // ── magazine
   if (evs.some(e => e.k === 'mag' && e.m === 'eject')) {
-    const cand = P.filter(p => {
+    const explicit=model._parts?.magazine;
+    const cand = explicit?[]:P.filter(p => {
       const c = p.box.getCenter(new THREE.Vector3()), sz = p.box.getSize(new THREE.Vector3());
       return p.obj.geometry.type !== 'TorusGeometry' && p.obj.geometry.type !== 'SphereGeometry'
         && Math.abs(c.x) <= 0.02 && c.z >= A.mag.z - 0.10 && c.z <= A.mag.z + 0.06
         && c.y <= A.mag.y + 0.05 && p.box.max.y <= A.mag.y + 0.075 && p.box.min.y <= A.mag.y + 0.02
         && sz.z <= 0.10 && sz.y <= 0.20;
     });
-    if (cand.length) {
+    if(explicit)M.mag={g:explicit,home:explicit.position.clone(),n:explicit.children.length};
+    else if (cand.length) {
       const u = new THREE.Box3(); cand.forEach(p => u.union(p.box));
       if (u.max.y - u.min.y >= 0.05 && u.min.y < A.mag.y + 0.005) {
         const top = new THREE.Vector3((u.min.x + u.max.x) / 2, u.max.y, (u.min.z + u.max.z) / 2);

@@ -57,6 +57,14 @@ Decorative fixtures and trim are batched and do not add tiny movement
 colliders. Natural districts use faceted stone and soil patches; built-up
 districts get paving joints, storage-unit hardware and wall/roof detailing.
 
+Foundry now has its own replacement in `foundry-map.js`: a staggered casting
+hall, offset spawn aprons, scrap/loading loops, four balcony stairs, a gantry
+crane and fixed-frame working presses. Its authored geometry bypasses generic
+theme/outskirts placement. Spawn screens prevent direct opening sight lines.
+With Playwright available, `node tools/test-foundry.cjs` checks routes, spawn
+safety, controller stair traversal and desktop/mobile renders; set
+`PLAYWRIGHT_MODULE` if Playwright is installed outside normal module lookup.
+
 ## Weapon Finish
 
 Gun metal uses clean, fine brushed surfaces and cached weapon-only reflections;

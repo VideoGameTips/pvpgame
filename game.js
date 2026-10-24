@@ -14623,6 +14623,7 @@ function buildRefineryLayout() {
 // 🔥 Foundry: a casting hall with a glowing pit at its heart and rings of catwalk round it, crucible racks, a slag
 // floor with pools you have to go round.
 function buildFoundryLayout() {
+  if (window.buildAuthoredFoundry) return window.buildAuthoredFoundry();
   const name = 'foundry', K = _bkBegin(name, 140, 140, 0x3e3a36);
   K.perim(9, 0x5a4a40);
   const steel = 0x6a5a50;
@@ -15854,6 +15855,7 @@ function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
     if (!MAP_GROUPS[name]) continue;
     try { if (_BESPOKE[name]) _BESPOKE[name](); } catch (e) { console.warn('[bespoke]', name, e); }
+    if (MAP_GROUPS[name].userData.authoredFoundry) continue;
     if (MAP_THEMES[name].tower) {
       const b = MAP_BOUNDS[name], scale = (b.halfX + 1.5) / 50;
       MAP_SPAWNS[name] = {
@@ -18053,21 +18055,32 @@ GIM.overgrowth = (X) => {
 // and hovers, then it comes down. Underneath is the last place to be. Six of them, on a beat that is not quite the same.
 GIM_LABELS.press = 'was flattened by a press';
 GIM.foundry = (X) => {
-  const spots = X.spots(6, { r: 3.4, pairs: true, sep: 16, maxR: 85, edge: 9 });
+  const authored = X.G.userData.authoredFoundry;
+  const spots = authored ? [-1,1].flatMap(s=>[-1,1].map(t=>({x:s*19,z:t*12})))
+    : X.spots(6, { r: 3.4, pairs: true, sep: 16, maxR: 85, edge: 9 });
   if (!spots.length) return;
   X.dbg(spots);
   const steel = _gimLam(0x6c747c), hazard = _gimLam(0xe6b422), dark = _gimLam(0x23262a);
   const PER = 5.4, HALF = 2.4;
   const presses = spots.map((s, i) => {
+    let piston = null;
     X.disc(s.x, s.z, 3.0, 0x1a1c1f, 0.9, 0.05);
     const ring = X.ring(s.x, s.z, 3.1, 0xffcc22, 0.9, 0.35, 0.07); ring.visible = false;
     const ram = new THREE.Group(); ram.position.set(s.x, 7.5, s.z); X.G.add(ram);
     const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); ram.add(m); return m; };
     add(new THREE.BoxGeometry(4.6, 0.9, 4.6), steel, 0, 0, 0);
     add(new THREE.BoxGeometry(4.7, 0.18, 4.7), hazard, 0, -0.34, 0);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.CylinderGeometry(0.22, 0.22, 11, 8), dark, sx * 1.6, 5.5, sz * 1.6);
-    add(new THREE.BoxGeometry(5.2, 1.0, 5.2), dark, 0, 11.2, 0);
-    return { x: s.x, z: s.z, ring, ram, off: (i * 0.9) % PER, hit: false };
+    if (authored) {
+      const K = _bkit('foundry');
+      for(const sx of [-1,1])for(const sz of [-1,1])K.box(s.x+sx*2.8,0,s.z+sz*2.8,.45,9,.45,0x52616a);
+      K.box(s.x,8.7,s.z,6.2,.6,6.2,0x252c30);
+      piston = new THREE.Mesh(new THREE.CylinderGeometry(.25,.25,1,12),steel);
+      piston.position.set(s.x,8.3,s.z);X.G.add(piston);
+    } else {
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.CylinderGeometry(0.22, 0.22, 11, 8), dark, sx * 1.6, 5.5, sz * 1.6);
+      add(new THREE.BoxGeometry(5.2, 1.0, 5.2), dark, 0, 11.2, 0);
+    }
+    return { x: s.x, z: s.z, ring, ram, piston, off: (i * 0.9) % PER, hit: false };
   });
   X.hint('🏭 PRESSES', 'The ring flashes, the plate drops, then it comes down.', '#ffcc22');
   X.on((dt, A, t) => {
@@ -18080,6 +18093,7 @@ GIM.foundry = (X) => {
       else if (u < 4.4) y = 0.45;
       else y = 0.45 + (u - 4.4) / 1.0 * 7.05;
       p.ram.position.y = y;
+      if(p.piston){const length=8.7-y-.45;p.piston.scale.y=length;p.piston.position.y=8.7-length/2;}
       p.ring.visible = warn || (u >= 3.5 && u < 4.4);
       if (p.ring.visible) p.ring.material.opacity = warn ? 0.35 + 0.55 * Math.abs(Math.sin(t * 16)) : 0.95;
       if (u >= 3.5 && u < 3.62 && !p.hit) {
@@ -19171,6 +19185,7 @@ LOOK.orbital_station = (X) => {
 };
 
 LOOK.foundry = (X) => {                                       // heavy industry: ingots, a chimney, anvils, a crucible cart
+  if (X.G.userData.authoredFoundry) return;
   X.scatter(() => lkIngots(), 7, { r: 1.6, sep: 16, solid: true });
   X.scatter(() => lkChimney(18), 2, { r: 2.2, sep: 60, minR: 30, solid: true, h: 3 });
   X.scatter(() => lkAnvil(), 4, { r: 1.2, sep: 24, solid: true });
@@ -20153,6 +20168,13 @@ function _upgradeMap(name) {
   if (!g || g._upgraded || !MAP_THEMES[name]) return;
   g._upgraded = true;
   const t0 = performance.now();
+  if (g.userData.authoredFoundry) {
+    // Preserve this map's authored routes and footprint instead of adding a generic outer ring.
+    try { _gimMap(name); } catch (e) { console.warn('[upgrade] gimmick',name,e); }
+    try { g._weathered=false; weatherMapGroup(g); } catch (e) {}
+    g.userData.upgradeMs=Math.round(performance.now()-t0);
+    return;
+  }
   try { _depthMap(name); } catch (e) { console.warn('[upgrade] depth', name, e); }
   try { addCentralMapStructure(name); } catch (e) { console.warn('[upgrade] central structure', name, e); }
   try { addOpenLaneCover(name); } catch (e) { console.warn('[upgrade] lane cover', name, e); }
@@ -71282,7 +71304,7 @@ const MAP_DESCS = {
   carrier:    '🚢 Carrier — flat deck that ROLLS with the sea · hangars + control tower',
   overgrowth: '🌲 Overgrowth — abandoned city reclaimed by nature · STRANGLER VINES root you',
   orbital_station: 'Orbital Station — modular pods and cycling decompression vents',
-  foundry:    '🏭 Foundry — conveyor belts, molten pools · PRESSES slam on a beat',
+  foundry:    '🏭 Foundry — staggered casting works, furnace lanes and loading yards · PRESSES slam on a beat',
   carnival:   '🎪 Carnival — ferris wheel, tents · the CAROUSEL carries you round and throws you off',
   biosphere:  'Biosphere — changing climates: growth, wind, frost and thermals',
   lockdown:   'Lockdown — prison blocks and timed security scanners',

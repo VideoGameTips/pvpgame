@@ -20669,6 +20669,49 @@ function gpCyl(g, mat, r1, r2, h, seg, x, y, z, rx = Math.PI / 2, rz = 0) {
   m.position.set(x, y, z); m.rotation.set(rx, 0, rz);
   m.castShadow = true; g.add(m); return m;
 }
+function gpOptic(g, x, y, z, length, radius, deckY) {
+  const optic = new THREE.Group();optic.position.set(x,y,z);optic.userData.weaponOptic=true;
+  const shell=new THREE.MeshPhongMaterial({color:0x222931,shininess:95,specular:0x9bacbb});
+  const rubber=new THREE.MeshPhongMaterial({color:0x15191e,shininess:24});
+  const steel=new THREE.MeshPhongMaterial({color:0x687987,shininess:145,specular:0xc6dfeb});
+  const glass=new THREE.MeshStandardMaterial({color:0x5299ac,metalness:.3,roughness:.12,
+    transparent:true,opacity:.23,depthWrite:false,side:THREE.DoubleSide});
+  const ring=(r,t,z,mat=shell)=>{
+    const m=new THREE.Mesh(new THREE.TorusGeometry(r,t,10,40),mat);
+    m.position.z=z;optic.add(m);return m;
+  };
+  const tube=(r1,r2,h,z,mat=shell)=>{
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,40,1,true),mat);
+    m.rotation.x=Math.PI/2;m.position.z=z;optic.add(m);return m;
+  };
+  tube(radius,radius,length*.64,0);
+  tube(radius*1.5,radius,length*.2,-length*.42);
+  tube(radius*1.25,radius*1.25,length*.2,length*.4,rubber);
+  for(const [r,z] of [[radius*1.5,-length*.52],[radius*1.25,length*.5]]){
+    ring(r,radius*.1,z);ring(r*.88,radius*.08,z+Math.sign(z)*.0008,rubber);
+    const lens=new THREE.Mesh(new THREE.CircleGeometry(r*.83,40),glass);
+    lens.position.z=z-Math.sign(z)*radius*.22;lens.userData.noSmooth=true;optic.add(lens);
+    const reflection=new THREE.Mesh(new THREE.RingGeometry(r*.65,r*.76,32,1,.25,.8),
+      new THREE.MeshBasicMaterial({color:0xc4f5ff,transparent:true,opacity:.25,depthWrite:false,side:THREE.DoubleSide}));
+    reflection.position.z=lens.position.z+Math.sign(z)*.0002;optic.add(reflection);
+  }
+  for(const zz of [-length*.22,length*.2]){
+    ring(radius*1.035,radius*.15,zz);
+    const h=y-deckY;
+    gpBox(optic,shell,radius*1.9,h,.014,0,-h/2,zz);
+    gpBox(optic,steel,radius*2.2,.004,.021,0,-h+.001,zz);
+    for(const side of [-1,1])gpCyl(optic,steel,.0023,.0023,.003,12,side*radius*1.08,-h+.006,zz,0,Math.PI/2);
+  }
+  for(const zz of [length*.34,length*.39,length*.44])ring(radius*1.26,.0008,zz,steel);
+  gpCyl(optic,shell,radius*.53,radius*.53,radius*.7,24,0,radius*1.18,0,0);
+  gpCyl(optic,rubber,radius*.64,radius*.64,.005,32,0,radius*1.57,0,0);
+  gpCyl(optic,rubber,radius*.57,radius*.57,.009,32,radius*1.27,0,0,0,Math.PI/2);
+  for(let i=0;i<12;i++){
+    const a=i*Math.PI/6;
+    gpBox(optic,steel,.0009,.003,.0017,Math.cos(a)*radius*.6,radius*1.6,Math.sin(a)*radius*.6,0,-a);
+  }
+  g.add(optic);return optic;
+}
 // A flat profile extruded across the weapon's width. Handles concave outlines
 // correctly (ear clipping) and chamfers the edges, which is what stops a plate
 // reading as a paper cut-out.
@@ -29117,17 +29160,9 @@ function buildSRX() {
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.082, 0.018); g.add(guard);
   gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.074, 0.018, 0.2);          // trigger
 
-  // ── Scope: top rail, centred, one clean tube -- orange objective rim up
-  //    front, cyan ocular lens at the eye, matching the family's accent glass. ──
+  // Centred optic, clamped directly to the receiver rail.
   gpBox(g, steel, 0.020, 0.010, 0.180, 0, 0.044, -0.020);                // rail
-  [-0.086, 0.052].forEach(z => gpBox(g, steel, 0.024, 0.020, 0.012, 0, 0.052, z)); // mount rings
-  gpCyl(g, blued, 0.0150, 0.0150, 0.150, 18, 0, 0.076, -0.030);          // scope tube
-  gpCyl(g, blued, 0.0100, 0.0100, 0.026, 18, 0, 0.076, 0.036);           // turret housing
-  gpCyl(g, bright, 0.0060, 0.0060, 0.014, 10, 0.020, 0.088, -0.020, 0, Math.PI/2); // turret knob
-  gpCyl(g, blued, 0.0205, 0.0205, 0.028, 18, 0, 0.076, -0.098);          // objective bell
-  gpCyl(g, gold,  0.0210, 0.0210, 0.004, 18, 0, 0.076, -0.113);          // objective rim, gold
-  gpCyl(g, blued, 0.0185, 0.0185, 0.024, 18, 0, 0.076, 0.050);           // ocular bell
-  gpCyl(g, glass, 0.0170, 0.0170, 0.004, 16, 0, 0.076, 0.063);           // ocular lens, cyan glow
+  gpOptic(g,0,.076,-.030,.166,.015,.049);
 
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.016, -0.500); g.add(flash);
   g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
@@ -30048,10 +30083,7 @@ function buildCrossbow() {
   gpCyl(g, bright, 0.0075, 0.0028, 0.026, 6, 0, 0.034, -0.226);        // broadhead
   [0, 1, 2].forEach(i => gpBox(g, inner, 0.0035, 0.012, 0.020, 0, 0.034, -0.042, (i * Math.PI * 2) / 3));
   // Scope over the rail.
-  gpCyl(g, blued, 0.0135, 0.0135, 0.110, 16, 0, 0.062, 0.010);
-  gpCyl(g, blued, 0.0180, 0.0180, 0.022, 16, 0, 0.062, -0.056);
-  gpCyl(g, inner, 0.0150, 0.0150, 0.005, 14, 0, 0.062, -0.066);
-  [-0.026, 0.046].forEach(z => gpBox(g, steel, 0.022, 0.026, 0.012, 0, 0.046, z));
+  gpOptic(g,0,.062,.010,.13,.0135,.035);
   // Fire control, foregrip, stirrup.
   gpPlate(g, poly, [[0.036,-0.028],[0.058,-0.048],[0.060,-0.096],[0.036,-0.104],[0.020,-0.056],[0.018,-0.032]], 0.028, 0);
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0032, 6, 12, Math.PI * 1.05), steel);
@@ -35804,6 +35836,16 @@ function addDefaultAutoAimer(model, weapon) {
   ring.position.set(cx, deckY + ringR * 0.95, rearZ);
   ring.castShadow = true;
   body.add(ring);
+  // An open reflex hood, not a solid cylinder blocking the sight line.
+  const hood=new THREE.Mesh(new THREE.CylinderGeometry(ringR*1.18,ringR*1.18,ringR*1.8,32,1,true),railMat);
+  hood.rotation.x=Math.PI/2;hood.position.copy(ring.position).add(new THREE.Vector3(0,0,-ringR*.7));body.add(hood);
+  const lens=new THREE.Mesh(new THREE.CircleGeometry(ringR*.94,32),new THREE.MeshStandardMaterial({
+    color:0x62a5b2,roughness:.14,metalness:.25,transparent:true,opacity:.14,depthWrite:false,side:THREE.DoubleSide}));
+  lens.position.copy(ring.position).add(new THREE.Vector3(0,0,-ringR*.2));lens.userData.noSmooth=true;body.add(lens);
+  const cradle=new THREE.Mesh(new THREE.BoxGeometry(ringR*2.1,ringR*.6,ringR*1.8),railMat);
+  cradle.position.set(cx,deckY+ringR*.2,hood.position.z);body.add(cradle);
+  const knob=new THREE.Mesh(new THREE.CylinderGeometry(ringR*.42,ringR*.42,.005,20),sightMat);
+  knob.rotation.z=Math.PI/2;knob.position.set(cx+ringR*1.17,ring.position.y,hood.position.z);body.add(knob);
   const frontBase = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.016, sx * 0.34), railH, Math.max(0.010, sz * 0.05)), railMat);
   frontBase.position.set(cx, deckY, frontZ);
   body.add(frontBase);
@@ -42933,8 +42975,12 @@ function setADS(on) {
 function drawScope() {
   const canvas = document.getElementById('scope-canvas');
   const W = window.innerWidth, H = window.innerHeight;
-  canvas.width = W; canvas.height = H;
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  if(canvas.width!==Math.round(W*dpr)||canvas.height!==Math.round(H*dpr)){
+    canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+  }
   const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
   const cx = W / 2, cy = H / 2;
   const r = Math.min(W, H) * 0.38;
 
@@ -42949,17 +42995,30 @@ function drawScope() {
   ctx.fill();
   ctx.globalCompositeOperation = 'source-over';
 
-  // Scope rim
-  ctx.strokeStyle = '#111';
-  ctx.lineWidth = 10;
+  // A machined eyepiece surrounds the clear lens; tint stays at its edges.
+  const rim=ctx.createLinearGradient(cx-r,cy-r,cx+r,cy+r);
+  rim.addColorStop(0,'#78909d');rim.addColorStop(.2,'#29343d');rim.addColorStop(.5,'#0a1016');rim.addColorStop(.8,'#39434a');rim.addColorStop(1,'#71828b');
+  ctx.strokeStyle = rim;
+  ctx.lineWidth = Math.max(10,r*.045);
   ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r+ctx.lineWidth*.5, 0, Math.PI * 2);
   ctx.stroke();
+  ctx.strokeStyle='#080d12';ctx.lineWidth=3;
+  ctx.beginPath();ctx.arc(cx,cy,r+1,0,Math.PI*2);ctx.stroke();
+  for(let i=0;i<48;i++){
+    const a=i*Math.PI/24,inner=r+r*.05,outer=inner+(i%4===0?7:3);
+    ctx.strokeStyle=i%4===0?'#71818b':'#35424a';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*inner,cy+Math.sin(a)*inner);
+    ctx.lineTo(cx+Math.cos(a)*outer,cy+Math.sin(a)*outer);ctx.stroke();
+  }
+  const vignette=ctx.createRadialGradient(cx,cy,r*.65,cx,cy,r);
+  vignette.addColorStop(0,'rgba(25,68,80,0)');vignette.addColorStop(.8,'rgba(25,68,80,.025)');vignette.addColorStop(1,'rgba(3,14,22,.32)');
+  ctx.fillStyle=vignette;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
 
   // Green reticle crosshair
   ctx.strokeStyle = 'rgba(0,255,80,0.9)';
   ctx.lineWidth = 1.5;
-  const gap = r * 0.18;
+  const gap = Math.max(5,r*.025);
   // Horizontal
   ctx.beginPath(); ctx.moveTo(cx - r + 10, cy); ctx.lineTo(cx - gap, cy); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx + gap, cy);      ctx.lineTo(cx + r - 10, cy); ctx.stroke();
@@ -42978,6 +43037,10 @@ function drawScope() {
     const y = cy + r * offset;
     ctx.beginPath(); ctx.moveTo(cx - half, y); ctx.lineTo(cx + half, y); ctx.stroke();
   });
+  for(const side of [-1,1])for(let i=1;i<=5;i++){
+    const x=cx+side*r*i*.12;
+    ctx.beginPath();ctx.moveTo(x,cy-3);ctx.lineTo(x,cy+3);ctx.stroke();
+  }
 }
 
 window.addEventListener('resize', () => {

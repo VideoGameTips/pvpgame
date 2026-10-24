@@ -57,6 +57,15 @@ Decorative fixtures and trim are batched and do not add tiny movement
 colliders. Natural districts use faceted stone and soil patches; built-up
 districts get paving joints, storage-unit hardware and wall/roof detailing.
 
+## Weapon Finish
+
+Gun metal uses clean, fine brushed surfaces and cached weapon-only reflections;
+polymer stays matte without the coarse all-over stipple. Wood grain, special
+skin artwork and emissive parts retain their identities. Material fusion keeps
+metal, polymer, wood and dark recesses separate. `weapon-finish.js` mounts small
+receiver hardware on thirteen default guns, batched into three meshes per gun
+so it follows the original moving part without changing handling or stats.
+
 ## Credits
 
 Original PVP Arena by VideoGameTips. Three.js is bundled under its MIT license.

@@ -3251,10 +3251,21 @@ const _mHSL = { h: 0, s: 0, l: 0 }, _mSpec = { h: 0, s: 0, l: 0 };
 // Gun surfaces, built on first use. Weapons are the thing a player stares at
 // for the whole match, so they get their own set rather than sharing the body's.
 let _gunSurf = null;
+function cleanGunSurface(kind) {
+  const map=surfTex('weapon-clean-'+kind,512,(ctx,size)=>{
+    ctx.fillStyle='#ffffff';ctx.fillRect(0,0,size,size);
+    if(kind==='steel'){
+      ctx.fillStyle='rgba(0,0,0,0.012)';
+      for(let y=3;y<size;y+=7)ctx.fillRect(0,y,size,1);
+    }
+  });
+  map.userData.weaponFinish=kind;
+  return {map};
+}
 function gunSurf() {
   return _gunSurf || (_gunSurf = {
-    steel: SURF.steel(0xffffff, 71),
-    poly:  SURF.polymer(0xffffff, 83),
+    steel: cleanGunSurface('steel'),
+    poly:  cleanGunSurface('polymer'),
     wood:  SURF.wood(0xffffff, 97),
     rub:   SURF.leather(0xffffff, 61),
   });
@@ -3286,27 +3297,32 @@ function _metalizeMat(m) {
   const shin = m.shininess || 0;
   const glossy = m.isMeshPhongMaterial && shin >= 60 && _mSpec.l >= 0.55;
   const warmMetal = _mHSL.h > 0.03 && _mHSL.h < 0.17 && _mHSL.s < 0.75;
-  const isMetal = glossy && (_mHSL.s < 0.45 || warmMetal);
+  const isMetal = (glossy && (_mHSL.s < 0.45 || warmMetal)) || (_mHSL.s<.22 && _mHSL.l>.12 && shin>=60);
   const isWood  = !isMetal && _mHSL.h > 0.015 && _mHSL.h < 0.13 && _mHSL.s > 0.22 && _mHSL.l > 0.12 && _mHSL.l < 0.62;
   const isBore  = _mHSL.l < 0.10;              // bores, gaps, shadow lines
-  let p;
+  let p,finishKind;
   if (m.userData && m.userData.skinTone) {
     // Skin. The polymer surface that suits a gun grip is a stipple of dark flecks, and on a fist it read as granite.
     p = { roughness: 0.6, metalness: 0.0, envMapIntensity: 0.55 };
+    finishKind='skin';
   } else if (isMetal) {
     // A polished slide and a bead-blasted receiver are both metal; shininess
     // is what the builder already used to say which, so it still decides.
-    p = { surface: G.steel, roughness: Math.max(0.14, 0.52 - (shin - 60) / 420), metalness: 0.95,
-          bumpScale: 0.00035, envMapIntensity: 1.25 };
+    p = { surface: G.steel, roughness: Math.max(.15,.24-(shin-60)/900), metalness: .88,
+          bumpScale: 0, envMapIntensity: 1.3 };
+    finishKind='steel';
   } else if (isBore) {
-    p = { surface: G.poly, roughness: 0.92, metalness: 0.30, bumpScale: 0.0004, envMapIntensity: 0.5 };
+    p = { roughness: .64, metalness: .12, envMapIntensity: .75 };
+    finishKind='shadow';
   } else if (isWood) {
-    p = { surface: G.wood, roughness: 0.42, metalness: 0.0, bumpScale: 0.0006, envMapIntensity: 1.0 };
+    p = { surface: G.wood, roughness: .39, metalness: 0, bumpScale: .0002, envMapIntensity: 1 };
+    finishKind='wood';
   } else {
     // Glass-filled polymer, rubber, coloured plastic: matte, a clear-coat's
     // worth of reflection and no more.
-    p = { surface: G.poly, roughness: m.isMeshPhongMaterial && shin > 40 ? 0.46 : 0.68,
-          metalness: 0.0, bumpScale: 0.0005, envMapIntensity: 0.85 };
+    p = { surface: G.poly, roughness: m.isMeshPhongMaterial && shin > 40 ? .36 : .53,
+          metalness: _mHSL.s>.3 && shin>40 ? .22 : .02, bumpScale: 0, envMapIntensity: 1 };
+    finishKind='polymer';
   }
   p.color = m.color.clone();
   for (const k of ['side', 'flatShading', 'depthTest', 'depthWrite', 'polygonOffset',
@@ -3317,7 +3333,7 @@ function _metalizeMat(m) {
   // there, and copying only the old material's userData over the top threw it
   // away — which is what kept every weapon colour skin dead even after the
   // collector learned to ask for it.
-  out.userData = Object.assign({}, m.userData, out.userData, { metalDone: true });
+  out.userData = Object.assign({}, m.userData, out.userData, { metalDone: true,weaponMaterial:finishKind });
   return out;
 }
 function metalizeModel(root) {
@@ -3328,6 +3344,9 @@ function metalizeModel(root) {
     if (swap.has(m)) return swap.get(m);
     let out = m;
     try { out = _metalizeMat(m); } catch (e) { console.warn('[pbr]', e); }
+    if(out?.isMeshStandardMaterial && out.metalness>.5 && !out.envMap && window.PVE_WEAPON_FINISH){
+      out.envMap=window.PVE_WEAPON_FINISH.environment(renderer);out.needsUpdate=true;
+    }
     swap.set(m, out);
     return out;
   };
@@ -35845,7 +35864,7 @@ function _smoothGeometry(g, grow = 0) {
   switch (g.type) {
     case 'BoxGeometry':
       if (Math.min(p.width, p.height, p.depth) > 0.006 && (p.widthSegments || 1) === 1 && (p.heightSegments || 1) === 1 && (p.depthSegments || 1) === 1)
-        out = _roundedBox(p.width + Math.min(grow, p.width * 0.1), p.height + Math.min(grow, p.height * 0.1), p.depth + Math.min(grow, p.depth * 0.1));
+        out = _roundedBox(p.width + Math.min(grow, p.width * 0.1), p.height + Math.min(grow, p.height * 0.1), p.depth + Math.min(grow, p.depth * 0.1),Math.min(p.width,p.height,p.depth)*.16);
       break;
     case 'CylinderGeometry':
       if (p.radialSegments >= 6 && p.radialSegments < 20) out = new THREE.CylinderGeometry(p.radiusTop, p.radiusBottom, p.height, 24, p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength);
@@ -35909,7 +35928,8 @@ function _fuseModel(root) {
     if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
     const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld), sz = b.getSize(new THREE.Vector3());
     const hsl = { h: 0, s: 0, l: 0 }; m.color.getHSL(hsl);
-    parts.push({ o, b: b.expandByScalar(0.004), vol: sz.x * sz.y * sz.z, hsl });
+    const finish=m.userData.weaponMaterial || (m.isMeshStandardMaterial ? (m.metalness>.45?'steel':'polymer') : (m.shininess>=65?'steel':'polymer'));
+    parts.push({ o, b: b.expandByScalar(0.004), vol: sz.x * sz.y * sz.z, hsl, finish });
   });
   const n = parts.length; if (n < 2) return root;
   const parent = parts.map((_, i) => i), find = i => parent[i] === i ? i : (parent[i] = find(parent[i]));
@@ -35919,7 +35939,7 @@ function _fuseModel(root) {
     return Math.abs(a.l - b.l) < (neutral ? 0.2 : 0.14) && (neutral || (dh < 0.07 && Math.abs(a.s - b.s) < 0.3));
   };
   for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
-    if (parts[i].b.intersectsBox(parts[j].b) && near(parts[i].hsl, parts[j].hsl)) parent[find(i)] = find(j);
+    if (parts[i].finish===parts[j].finish && parts[i].b.intersectsBox(parts[j].b) && near(parts[i].hsl, parts[j].hsl)) parent[find(i)] = find(j);
   }
   const groups = new Map();
   parts.forEach((p, i) => { const r = find(i); (groups.get(r) || groups.set(r, []).get(r)).push(p); });
@@ -48704,7 +48724,10 @@ function prepViewModel(m, weaponId) {
   if (weaponId) ensureMech(m, weaponId);       // working parts, once the finished model is final
   return m;
 }
-weaponModels.forEach((m, i) => prepViewModel(m, WEAPONS[i] && WEAPONS[i].id));
+weaponModels.forEach((m, i) => {
+  const id=WEAPONS[i] && WEAPONS[i].id;prepViewModel(m,id);
+  window.PVE_WEAPON_FINISH?.detail(m,id);
+});
 // prepViewModel adds geometry (seams, plates, pins, vents) with materials of
 // its own, and it runs AFTER camera.add, so those parts missed the finishing
 // pass entirely — 522 Phong materials still rendering as flat card next to a

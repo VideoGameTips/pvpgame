@@ -5132,6 +5132,8 @@ function playReloadSound(w, durMs, plan) {
   }
 
   // The assembly, at the frames it actually moves.
+  const model=weaponModels[WEAPONS.findIndex(item=>item.id===id)];
+  const rack=magazineRackTiming(model,w,evs);
   const beats = assemblyBeats(id, plan && plan.keys);
   if (beats) {
     if (beats.open !== null) metalClack(ctx, at(beats.open), g, V * 0.75, 500, 0.085);
@@ -5141,7 +5143,11 @@ function playReloadSound(w, durMs, plan) {
   // Charging handle at the end for anything that runs a bolt, and a fallback
   // pair for weapons with no prop table at all so nothing is ever silent.
   if (!sawAnything) { magOut(at(0.22)); magIn(at(0.62)); }
-  if (sawMagOut || !sawAnything) metalClack(ctx, at(0.93), g, V * 0.80, 560, 0.075);
+  if(rack){
+    playFilteredNoise(ctx,at(rack.pull),Math.max(.025,dur*(rack.peak-rack.pull)),g,V*.32,'bandpass',1150,.7,.004,0);
+    metalClack(ctx,at(rack.peak),g,V*.32,800,.035);
+    metalClack(ctx,at(rack.release),g,V*.80,560,.075);
+  }else if (sawMagOut || !sawAnything) metalClack(ctx, at(0.93), g, V * 0.80, 560, 0.075);
 }
 const REVERB_EVENTS = new Set(['explosion', 'freeze_shatter', 'fire_sizzle', 'slam_boom']);
 function playSoundEvent(name, opts = {}) {
@@ -24113,6 +24119,7 @@ function buildAK20() {
   box(inner, 0.007, 0.006, 0.006, 0, 0.083, -0.082);                 // peep hole shadow
 
   gpPart(g, 'main', () => { box(bright, 0.014, 0.011, 0.030, 0.030, 0.046, -0.030); });
+  g._parts.main.userData.chargingHandle=true;
 
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.0038, 6, 12, Math.PI * 1.1), steel);
   guard.rotation.set(0, Math.PI / 2, -0.45); guard.position.set(0, -0.078, 0.020); g.add(guard);
@@ -29760,7 +29767,9 @@ function updateAkimboHands(dt) {
       holder.position.set(A.rest[i].x, A.rest[i].y, A.rest[i].z + k * 0.018);
       holder.rotation.x = -k * 0.07;
       holder.rotation.z = side * 0.42 * roll;                    // a reload rolls each gun in toward the other
-      A.guns[i]._slide.position.z = k * 0.024;                   // and every shot runs the slide back
+      const rack=magazineRackTiming(model,WEAPONS[currentWeaponIdx],RELOAD_PROPS.akimbo);
+      const rackBack=rack&&reloading ? .032*magazineRackAmount(rt,rack) : 0;
+      A.guns[i]._slide.position.z = Math.max(k*.024,rackBack);
     }
     const H = model._hands;
     if (H) { placeAkimboHand(A, H.rear, 0); placeAkimboHand(A, H.front, 1); }
@@ -48748,6 +48757,18 @@ const _MECH_ROUND = {   // synthesized projectile, placed on the muzzle anchor
   rpg: { kind: 'rocket', s: 1.0, dz: 0.03 }, bazooka: { kind: 'rocket', s: 1.25, dz: 0.03 },
   mortar_rifle: { kind: 'shell', s: 1, dz: 0.02 },
 };
+function magazineRackTiming(model,w,evs) {
+  if(!model || !model._rackReload || !w || w.archived)return null;
+  if(!model._mech?.knob && !model._mech?.slide && !model._akimbo)return null;
+  const seats=(evs||[]).filter(e=>e.k==='mag'&&e.m==='arrive');if(!seats.length)return null;
+  const seat=Math.max(...seats.map(e=>e.t)),left=1-seat;if(left<.02)return null;
+  return {pull:seat+left*.38,peak:seat+left*.64,release:seat+left*.82};
+}
+function magazineRackAmount(t,rack) {
+  if(t<rack.pull||t>=rack.release)return 0;
+  return t<=rack.peak?_eqSm((t-rack.pull)/(rack.peak-rack.pull)):
+    1-_eqSm((t-rack.peak)/(rack.release-rack.peak));
+}
 function _buildMech(model, id, evs) {
   const A = model._anchors, w = WEAPONS.find(x => x.id === id);
   if (!A || !w || model._throwable) return null;
@@ -48774,8 +48795,9 @@ function _buildMech(model, id, evs) {
   }
   // ── pistol slide / rifle charging handle
   const evsKinds = evs.map(e => e.k);
+  const pistolSlide=w.slot==='secondary'&&evsKinds.includes('mag')&&/Secondary|Pistol|Hand Cannon|Armor Piercer/.test(w.type);
   const fullB = new THREE.Box3(); P.forEach(p => fullB.union(p.box));
-  if (w.slot === 'secondary' && evsKinds.includes('mag') && /Secondary|Pistol|Hand Cannon|Armor Piercer/.test(w.type)) {
+  if (pistolSlide) {
     // the slide: the highest long box, plus the small fittings sitting on it
     const top = P.filter(p => { const sz = p.box.getSize(new THREE.Vector3()), c = p.box.getCenter(new THREE.Vector3()); return p.obj.geometry.type === 'BoxGeometry' && sz.z >= 0.09 && sz.y >= 0.022 && Math.abs(c.x) < 0.02 && c.y > A.mag.y + 0.03; })
                   .sort((a, b) => b.box.max.y - a.box.max.y)[0];
@@ -48788,7 +48810,12 @@ function _buildMech(model, id, evs) {
         M.slide = { g: sg, z0: sg.position.z, n: fit.length };
       }
     }
-  } else if (evsKinds.includes('mag') && !model._parts) {
+  }
+  const authored=model._parts?.main?.userData.chargingHandle?model._parts.main:null;
+  if(authored&&model._rackReload) {
+    M.knob={g:authored,home:authored.position.clone(),grip:authored.children[0].position.clone()};
+  } else if (!M.slide && evsKinds.includes('mag') && !model._akimbo &&
+    ((!model._parts && !pistolSlide) || model._rackReload)) {
     const knob = new THREE.Group();
     const stem = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.006, 0.016), _mechMat(0x2b2f35, 60)); knob.add(stem);
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.011, 0.022), _mechMat(0x454b53, 90)); grip.position.set(0.008, 0, 0.004); knob.add(grip);
@@ -48806,7 +48833,12 @@ function _buildMech(model, id, evs) {
         knob.position.set(rec.box.max.x + 0.003, y, z);   // the stem is 10 mm wide: its inner face sinks 2 mm into the side
       }
     }
-    model.add(knob); M.knob = { g: knob, home: knob.position.clone() };
+    if(model._rackReload){
+      stem.geometry=_roundedBox(.014,.006,.014,.0014,10);
+      grip.geometry=_roundedBox(.014,.011,.020,.002,10);
+      metalizeModel(knob);
+    }
+    model.add(knob); M.knob = { g: knob, home: knob.position.clone(),grip:grip.position.clone() };
   }
   // ── the projectile that sits in the front of a launcher
   const find = _MECH_FIND[id], make = _MECH_ROUND[id] || (id === 'crossbow' ? { kind: 'bolt' } : null);
@@ -48850,6 +48882,7 @@ function updateGunMech(model, id, tR, evs, durMs) {
   const ammo = idx >= 0 && weaponAmmo[idx] ? weaponAmmo[idx].ammo : 1;
   const magSize = idx >= 0 ? WEAPONS[idx].mag : 1;
   const beat = (kind, mode) => (evs || []).filter(e => e.k === kind && e.m === mode);
+  const rack=magazineRackTiming(model,WEAPONS.find(w=>w.id===id),evs);
   // magazine
   if (M.mag) {
     let vis = true, k = 1;
@@ -48869,7 +48902,8 @@ function updateGunMech(model, id, tR, evs, durMs) {
   if (M.knob) {
     let back = 0.030 * M.kick;
     if (tR != null) {
-      if (tR > 0.80 && tR <= 0.88) back = Math.max(back, 0.040 * _eqSm((tR - 0.80) / 0.08));
+      if(rack)back=Math.max(back,.040*magazineRackAmount(tR,rack));
+      else if (tR > 0.80 && tR <= 0.88) back = Math.max(back, 0.040 * _eqSm((tR - 0.80) / 0.08));
       else if (tR > 0.88 && tR < 0.92) back = Math.max(back, 0.040 * (1 - _eqSm((tR - 0.88) / 0.04)));
     }
     M.knob.g.position.set(M.knob.home.x, M.knob.home.y, M.knob.home.z + back);
@@ -48879,6 +48913,7 @@ function updateGunMech(model, id, tR, evs, durMs) {
     let back = 0.026 * M.kick;
     const locked = ammo <= 0 ? 0.030 : 0;
     if (tR == null) back = Math.max(back, locked);
+    else if(rack)back=Math.max(tR<rack.peak?locked:0,.045*magazineRackAmount(tR,rack));
     else if (tR <= 0.80) back = Math.max(back, locked);
     else if (tR <= 0.88) back = Math.max(locked, 0.045 * _eqSm((tR - 0.80) / 0.08));
     else if (tR < 0.92) back = 0.045 * (1 - _eqSm((tR - 0.88) / 0.04));
@@ -48936,6 +48971,7 @@ function addViewArms(root) {
     const d = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize().applyQuaternion(hand.quaternion.clone().invert());
     const pivot = new THREE.Group();
     pivot.userData.vmHand = true;
+    pivot.userData.vmForearm = true;
     pivot.position.set(0, 0, 0.034);        // the back face of the fist: the wrist
     pivot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
     const arm = new THREE.Mesh(new THREE.BoxGeometry(root._equipmentHands ? 0.055 : 0.080, root._equipmentHands ? 0.052 : 0.076, 0.40), M.f); arm.position.z = 0.20;   // wrist to off-screen
@@ -48960,7 +48996,9 @@ function prepViewModel(m, weaponId) {
   return m;
 }
 weaponModels.forEach((m, i) => {
-  const id=WEAPONS[i] && WEAPONS[i].id;prepViewModel(m,id);
+  const w=WEAPONS[i],id=w&&w.id;
+  m._rackReload=!!w&&!w.archived&&!w.skinOnly&&w.mag>1;
+  prepViewModel(m,id);
   window.PVE_WEAPON_FINISH?.detail(m,id);
 });
 // prepViewModel adds geometry (seams, plates, pins, vents) with materials of
@@ -54443,6 +54481,7 @@ function updateReloadAnim() {
     if (H) {
       H.rear.position.copy(H.rearHome); H.rear.rotation.copy(H.rearRot);
       if (!H.single) { H.front.position.copy(H.frontHome); H.front.rotation.copy(H.frontRot); }
+      for(const arm of H.front.children)if(arm.userData.reloadArmHome)arm.quaternion.copy(arm.userData.reloadArmHome);
     }
   };
   if (!model._reloadStart || !model._reloadDur) {
@@ -54538,7 +54577,7 @@ function updateReloadAnim() {
   // back, a top cover lifts, a magazine falls out of the well.
   const parts = model._parts;
   if (parts) {
-    if (parts.main) {
+    if (parts.main && (inspecting || parts.main!==model._mech?.knob?.g)) {
       const mh = parts.main._home || _ZERO3;
       parts.main.position.set(mh.x + P.ax, mh.y + P.ay, mh.z + P.az);
       parts.main.rotation.set(P.arx, P.ary, P.arz + (parts.main._spin || 0));
@@ -54561,6 +54600,26 @@ function updateReloadAnim() {
     H.rear.position.set(H.rearHome.x + P.hx * 0.4, H.rearHome.y + P.hy * 0.4,
                         H.rearHome.z + P.hz * 0.4);
     H.rear.rotation.set(H.rearRot.x + P.hr * 0.5, H.rearRot.y, H.rearRot.z);
+  }
+  if(H&&!H.single&&!H.akimbo&&!inspecting&&!skinReload&&!magic){
+    const rack=magazineRackTiming(model,WEAPONS[currentWeaponIdx],evs);
+    if(rack){
+      const reach=_eqSm((t-(rack.pull-.08))/.06)*(1-_eqSm((t-rack.release)/.05));
+      const action=model._mech.knob||model._mech.slide;
+      const point=model._mech.knob?(action.grip||new THREE.Vector3(.008,0,.004)).clone():new THREE.Vector3(.018,.008,.015);
+      model.updateWorldMatrix(true,true);action.g.localToWorld(point);model.worldToLocal(point);
+      point.x+=.012;point.y-=.022;H.front.position.lerp(point,reach);
+      H.front.rotation.x+=(H.frontRot.x+.15-H.front.rotation.x)*reach;
+      H.front.rotation.z+=(H.frontRot.z-.35-H.front.rotation.z)*reach;
+      // Drop the elbow below the view while the wrist reaches up. Moving the
+      // old forearm unchanged here would send it back through the camera.
+      for(const arm of H.front.children)if(arm.userData.vmForearm){
+        arm.userData.reloadArmHome ||= arm.quaternion.clone();
+        const direction=new THREE.Vector3(-.9,-1.5,.35).normalize().applyQuaternion(H.front.quaternion.clone().invert());
+        const target=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),direction);
+        arm.quaternion.copy(arm.userData.reloadArmHome).slerp(target,reach);
+      }
+    }
   }
   if (secretTrack) finishSecretInspectPose(model, t, P);
 }

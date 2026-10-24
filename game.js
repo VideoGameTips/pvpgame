@@ -38596,21 +38596,21 @@ function _tracerFor(tint, r) {
   const key = tint + '|' + r;
   let p = _tracerParts.get(key);
   if (p) return p;
-  const len = Math.max(0.42, r * 11);
+  const len = Math.max(1.25, Math.min(2.6, r * 32));
+  const width = Math.min(0.022, r * 0.4);
   p = {
     len,
     // Tapered sheath: fat at the nose, thinning to nothing behind. Additive so
     // overlapping tracers bloom together instead of flattening each other, and
     // depthWrite off so they don't punch holes in one another.
-    glowGeo: new THREE.CylinderGeometry(r * 0.95, r * 0.12, len, 6, 1, true),
+    glowGeo: new THREE.CylinderGeometry(width, width * 0.08, len, 8, 1, true),
     glowMat: new THREE.MeshBasicMaterial({
-      color: tint, transparent: true, opacity: 0.55,
+      color: tint, transparent: true, opacity: 0.95, toneMapped: false,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     }),
-    // Short white-hot core riding at the nose — this is what reads as "bullet"
-    // at speed, with the coloured sheath trailing it.
-    coreGeo: new THREE.CylinderGeometry(r * 0.38, r * 0.22, len * 0.45, 6),
-    coreMat: new THREE.MeshBasicMaterial({ color: 0xfff3d6 }),
+    // A narrow, solid hot core stays legible inside the orange sheath.
+    coreGeo: new THREE.CylinderGeometry(width * 0.38, width * 0.08, len * 0.85, 8),
+    coreMat: new THREE.MeshBasicMaterial({ color: 0xffa239, toneMapped: false }),
   };
   _tracerParts.set(key, p);
   return p;
@@ -39061,24 +39061,8 @@ function _buildPie(tint, r) {
 }
 
 function _buildPellet(tint, r) {
-  // Buckshot: a spread of six should read as a spread of small dull lead
-  // balls, not six copies of the same bright rifle tracer. Dark metal, no
-  // glowing core — just a short dim smoke-streak so it's still trackable.
-  const pr = r * 0.55;
-  const len = Math.max(0.24, pr * 8);
-  const P = _projCache('pellet|'+pr, () => ({
-    ball: new THREE.SphereGeometry(pr, 6, 5),
-    ballM: new THREE.MeshPhongMaterial({ color: 0x2b2b2e, shininess: 30, specular: 0x555555 }),
-    streak: new THREE.CylinderGeometry(pr * 0.5, pr * 0.05, len, 5, 1, true),
-    streakM: new THREE.MeshBasicMaterial({ color: 0x4a4a4a, transparent: true, opacity: 0.3,
-      depthWrite: false, side: THREE.DoubleSide }),
-  }));
-  const g = new THREE.Group();
-  g.add(new THREE.Mesh(P.ball, P.ballM));
-  const streak = new THREE.Mesh(P.streak, P.streakM);
-  streak.position.y = -len * 0.5;
-  g.add(streak);
-  g._alignToDir = true;
+  const g = _buildRoundStreak(0xff6b08, r * 0.55);
+  g.scale.y = 0.6;
   return g;
 }
 
@@ -39533,14 +39517,18 @@ function makeBulletMesh(color, size, weaponId, own) {
     case 'donut':   return _buildDonutShot(color, r);
   }
   // 'bullet' — a solid metal round. Orange/white tracer stretched along the path.
-  const tint = color || 0xff8a1e;
+  const tint = look ? (color ?? 0xff6b08) : 0xff6b08;
+  return _buildRoundStreak(tint, r);
+}
+
+function _buildRoundStreak(tint, r) {
   const p = _tracerFor(tint, r);
   const g = new THREE.Group();
   const glow = new THREE.Mesh(p.glowGeo, p.glowMat);
   glow.position.y = -p.len * 0.5;
   g.add(glow);
   const core = new THREE.Mesh(p.coreGeo, p.coreMat);
-  core.position.y = -p.len * 0.20;
+  core.position.y = -p.len * 0.425;
   g.add(core);
   g._alignToDir = true;
   return g;
@@ -39712,37 +39700,78 @@ function registerNearMiss(pos, speed = 120) {
   flashScreen('rgba(255,255,255,0.055)', 80);
 }
 
+const _impactFX = [];
+let _impactFXLast = 0, _impactTextures = null;
+function impactTextures() {
+  if (_impactTextures) return _impactTextures;
+  const make = draw => {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    draw(c.getContext('2d'));
+    return new THREE.CanvasTexture(c);
+  };
+  const soft = make(c => {
+    const g = c.createRadialGradient(64,64,0,64,64,62);
+    g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(.22,'rgba(255,255,255,.65)');
+    g.addColorStop(1,'rgba(255,255,255,0)'); c.fillStyle=g; c.fillRect(0,0,128,128);
+  });
+  const mark = make(c => {
+    const g = c.createRadialGradient(64,64,8,64,64,62);
+    g.addColorStop(0,'rgba(8,7,6,.98)'); g.addColorStop(.25,'rgba(17,14,11,.95)');
+    g.addColorStop(.42,'rgba(88,77,62,.65)'); g.addColorStop(.58,'rgba(24,20,17,.35)');
+    g.addColorStop(1,'rgba(24,20,17,0)'); c.fillStyle=g; c.fillRect(0,0,128,128);
+    // Irregular chipped rim and short hairline fractures, all flush with the wall.
+    for(let i=0;i<13;i++) {
+      const a=i*2.39996, r=19+(i%4)*2;
+      c.beginPath(); c.moveTo(64+Math.cos(a)*r,64+Math.sin(a)*r);
+      c.lineTo(64+Math.cos(a+.12)*(r+9),64+Math.sin(a+.12)*(r+9));
+      c.lineTo(64+Math.cos(a+.22)*r,64+Math.sin(a+.22)*r);
+      c.fillStyle=i%2?'rgba(160,146,124,.65)':'rgba(14,12,10,.8)'; c.fill();
+      if(i%3===0){c.beginPath();c.moveTo(64+Math.cos(a)*r,64+Math.sin(a)*r);
+        c.lineTo(64+Math.cos(a+.07)*43,64+Math.sin(a+.07)*43);
+        c.strokeStyle='rgba(20,17,14,.4)';c.lineWidth=.7;c.stroke();}
+    }
+  });
+  return _impactTextures = {soft,mark,chip:new THREE.TetrahedronGeometry(1)};
+}
+function updateImpactDebris() {
+  const now=performance.now(), dt=_impactFXLast?Math.min(.05,(now-_impactFXLast)/1000):0;
+  _impactFXLast=now;
+  for(let i=_impactFX.length-1;i>=0;i--){
+    const p=_impactFX[i], age=(now-p.born)/1000;
+    if(age>=p.life){scene.remove(p.mesh);p.mesh.material.dispose();_impactFX.splice(i,1);continue;}
+    p.velocity.y-=p.gravity*dt; p.mesh.position.addScaledVector(p.velocity,dt);
+    p.mesh.material.opacity=p.opacity*Math.pow(1-age/p.life,2);
+    if(p.dust)p.mesh.scale.multiplyScalar(1+dt*2.8);
+    else if(p.mesh.isMesh){p.mesh.rotation.x+=dt*8;p.mesh.rotation.z+=dt*5;}
+  }
+}
 function spawnImpactDebris(pos, normal, weaponId) {
   const kind = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
   const hardHit = kind === 'slug' || kind === 'rocket' || kind === 'grenade';
   const impactMul = hyperrealismFactor('impact');
-  const count = Math.round((hardHit ? 16 : 8) * impactMul);
+  const count = Math.min(14, Math.round((hardHit ? 12 : 7) * impactMul));
   const color = normal.y > 0.65 ? 0x8a7861 : 0xc6b18a;
+  const textures=impactTextures();
   for (let i = 0; i < count; i++) {
-    const spark = i < count * 0.45;
-    const mat = new THREE.MeshBasicMaterial({ color: spark ? 0xffbb55 : color, transparent: true, opacity: spark ? 0.95 : 0.78 });
-    const geo = spark
-      ? new THREE.BoxGeometry(0.010, 0.010, 0.050 + Math.random() * 0.060)
-      : new THREE.SphereGeometry(0.018 + Math.random() * 0.022, 5, 4);
-    const p = new THREE.Mesh(geo, mat);
+    const spark = i < 2, dust = i >= count-2;
+    const mat = spark || dust
+      ? new THREE.SpriteMaterial({map:textures.soft,color:spark?0xffa329:color,
+        transparent:true,opacity:spark?1:.25,depthWrite:false,
+        blending:spark?THREE.AdditiveBlending:THREE.NormalBlending,toneMapped:!spark})
+      : new THREE.MeshStandardMaterial({color,roughness:.9,transparent:true,opacity:.9});
+    const p = spark || dust ? new THREE.Sprite(mat) : new THREE.Mesh(textures.chip,mat);
+    if(spark){p.scale.set(.025,.12,1);mat.rotation=Math.random()*Math.PI;}
+    else if(dust)p.scale.setScalar(.13+Math.random()*.08);
+    else p.scale.set(.008+Math.random()*.012,.008+Math.random()*.01,.006);
     p.position.copy(pos).addScaledVector(normal, 0.035);
     p.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
     scene.add(p);
     const side = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.9, Math.random() - 0.5).normalize();
     side.addScaledVector(normal, 0.8).normalize();
     const speed = ((spark ? 4.2 : 2.2) + Math.random() * (hardHit ? 5.8 : 3.8)) * (0.9 + impactMul * 0.16);
-    let age = 0;
-    const tick = () => {
-      age += 0.016;
-      p.position.addScaledVector(side, speed * 0.016);
-      side.y -= 4.8 * 0.016;
-      p.rotation.x += 13 * 0.016; p.rotation.z += 9 * 0.016;
-      const life = (spark ? 0.22 : 0.48) * (hyperrealisticOn() ? 1.2 : 1);
-      mat.opacity = Math.max(0, (spark ? 0.95 : 0.78) * (1 - age / life));
-      if (age < life) requestAnimationFrame(tick);
-      else { scene.remove(p); p.geometry.dispose(); p.material.dispose(); }
-    };
-    requestAnimationFrame(tick);
+    _impactFX.push({mesh:p,born:performance.now(),velocity:side.multiplyScalar(dust?.35:speed),
+      life:spark?.12:dust?.42:.32,gravity:dust?0:7,opacity:mat.opacity,dust});
+    while(_impactFX.length>96){const old=_impactFX.shift();scene.remove(old.mesh);old.mesh.material.dispose();}
   }
 }
 
@@ -55463,13 +55492,14 @@ function spawnImpactMark(pos, normal, weaponId) {
   const w = WEAPONS.find(x => x.id === weaponId);
   const r = Math.max(0.05, Math.min(0.26, (w && w.bulletSize ? w.bulletSize * 2.2 : 0.09)));
   const m = new THREE.Mesh(
-    new THREE.CircleGeometry(r, 10),
-    new THREE.MeshBasicMaterial({ color: 0x15110e, transparent: true, opacity: 0.80,
+    new THREE.PlaneGeometry(r * 2.8, r * 2.8),
+    new THREE.MeshBasicMaterial({ map: impactTextures().mark, color: 0xffffff, transparent: true, opacity: 0.80,
                                   depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   // Sit on the surface, facing out of it, lifted just clear so it does not
   // fight the floor for the same pixels.
   m.quaternion.setFromUnitVectors(_UNIT_Z, normal);
-  m.position.copy(pos).addScaledVector(normal, 0.012);
+  m.rotateZ(Math.random()*Math.PI*2);
+  m.position.copy(pos).addScaledVector(normal, 0.003);
   scene.add(m);
   spawnImpactDebris(pos, normal, weaponId);
   _impactMarks.push({ mesh: m, born: Date.now() });
@@ -55480,6 +55510,7 @@ function spawnImpactMark(pos, normal, weaponId) {
 }
 
 function updateImpactMarks() {
+  updateImpactDebris();
   const now = Date.now();
   for (let i = _impactMarks.length - 1; i >= 0; i--) {
     const age = now - _impactMarks[i].born;

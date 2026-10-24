@@ -20672,6 +20672,30 @@ function gpCyl(g, mat, r1, r2, h, seg, x, y, z, rx = Math.PI / 2, rz = 0) {
 // A flat profile extruded across the weapon's width. Handles concave outlines
 // correctly (ear clipping) and chamfers the edges, which is what stops a plate
 // reading as a paper cut-out.
+function smoothManufacturedBevels(geometry) {
+  const positions = geometry.attributes.position, normals = geometry.attributes.normal;
+  const source = normals.array.slice(), seams = new Map();
+  // Extruded bevels duplicate vertices at each face. Blend their shading at
+  // shallow seams without rounding over sharp profile corners or cut-outs.
+  for (let i = 0; i < positions.count; i++) {
+    const key = [positions.getX(i),positions.getY(i),positions.getZ(i)].map(v=>Math.round(v*1e7)).join(',');
+    if (!seams.has(key)) seams.set(key, []);
+    seams.get(key).push(i);
+  }
+  for (const indices of seams.values()) for (const i of indices) {
+    const x=source[i*3],y=source[i*3+1],z=source[i*3+2];let nx=0,ny=0,nz=0;
+    const unique = new Set();
+    for (const j of indices) {
+      const a=source[j*3],b=source[j*3+1],c=source[j*3+2];
+      if(x*a+y*b+z*c < .55) continue;
+      const key=[a,b,c].map(v=>Math.round(v*1e5)).join(',');if(unique.has(key))continue;unique.add(key);
+      nx+=a;ny+=b;nz+=c;
+    }
+    const length=Math.hypot(nx,ny,nz)||1;normals.setXYZ(i,nx/length,ny/length,nz/length);
+  }
+  normals.needsUpdate=true;
+  return geometry;
+}
 function gpPlate(g, mat, pts, width, x = 0) {
   const shape = new THREE.Shape();
   pts.forEach((pt, i) => (i ? shape.lineTo(pt[0], pt[1]) : shape.moveTo(pt[0], pt[1])));
@@ -20679,10 +20703,11 @@ function gpPlate(g, mat, pts, width, x = 0) {
   const bevel = Math.min(0.0016, width * 0.2);
   const geo = new THREE.ExtrudeGeometry(shape, {
     depth: width, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel,
-    bevelSegments: 1, curveSegments: 1,
+    bevelSegments: 3, curveSegments: 6,
   });
   geo.rotateY(-Math.PI / 2);
   geo.translate(x + width / 2, 0, 0);
+  smoothManufacturedBevels(geo);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true; mesh.receiveShadow = true;
   g.add(mesh); return mesh;
@@ -23911,10 +23936,11 @@ function buildAK20() {
     const bevel = Math.min(0.0016, width * 0.2);
     const geo = new THREE.ExtrudeGeometry(shape, {
       depth: width, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel,
-      bevelSegments: 1, curveSegments: 1,
+      bevelSegments: 3, curveSegments: 6,
     });
     geo.rotateY(-Math.PI / 2);
     geo.translate(x + width / 2, 0, 0);
+    smoothManufacturedBevels(geo);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true; mesh.receiveShadow = true;
     g.add(mesh);
@@ -31029,10 +31055,11 @@ function _softBox(w, h, d, bevel) {
   shape.closePath();
   const geo = new THREE.ExtrudeGeometry(shape, {
     depth: d - 2 * b, bevelEnabled: true,
-    bevelThickness: b, bevelSize: b, bevelSegments: 1, curveSegments: 1,
+    bevelThickness: b, bevelSize: b, bevelSegments: 3, curveSegments: 6,
   });
   // Extrude runs 0..depth along +Z with the bevel hanging off both ends; recentre.
   geo.translate(0, 0, -(d * 0.5 - b));
+  smoothManufacturedBevels(geo);
   return geo;
 }
 
@@ -35811,8 +35838,8 @@ for (let i = 0; i < WEAPONS.length; i++) {
 
 // ── 🫧 Smooth model skins ───────────────────────────────────────────────────────────────────────────────────────────
 // The model skins are built from primitives with a handful of facets each: a 7-sided barrel, a 6x5 sphere, a box with
-// edges sharp enough to cut. That reads as a pile of parts. Every model skin is passed through this on its way out of
-// its builder -- the built-in guns are left exactly as they were -- and comes back with:
+// edges sharp enough to cut. That reads as a pile of parts. Model skins and the default weapon finishing pass use
+// this helper, preserving dimensions and moving-part transforms, and come back with:
 //   • every box given rounded edges (a bevel proportional to its smallest side, so a fat grip and a thin rail both get
 //     the right amount), with the box's own UVs and per-face groups untouched;
 //   • cylinders, cones, spheres, tori, capsules and lathed parts re-cut with enough facets to read as round (shapes that
@@ -35820,12 +35847,13 @@ for (let i = 0; i < WEAPONS.length; i++) {
 //   • faceted rocks and gems raised to a smooth detail level, and flat shading switched off.
 // Identical parts share one geometry, so a belt of fifty rounds costs one.
 const _smoothGeoCache = new Map();
-function _roundedBox(w, h, d, radius) {
+function _roundedBox(w, h, d, radius, segments = 6) {
   const hw = w / 2, hh = h / 2, hd = d / 2;   // (callers pass the size they want, grown or not)
   const m3 = Math.min(w, h, d), r = Math.max(0.0008, Math.min(radius ?? 0.016, m3 * (radius === undefined ? .32 : .45)));
-  const g = new THREE.BoxGeometry(w, h, d, 6, 6, 6), pos = g.attributes.position, nor = g.attributes.normal;
-  // 7 vertices an axis: centre, the two that end the flat face, the two half-way round the bevel, the edge.
+  const g = new THREE.BoxGeometry(w, h, d, segments, segments, segments), pos = g.attributes.position, nor = g.attributes.normal;
+  // Weapon boxes reserve four bands for the curved edge, keeping the broad face flat.
   const map = (v, a) => { const t = Math.abs(v) / a, s = Math.sign(v);
+    if (segments === 10) return s * (t <= .2 ? t / .2 * (a-r) : a-r + (t-.2) / .8 * r);
     return s * (t < 0.2 ? 0 : t < 0.5 ? a - r : t < 0.84 ? a - r / 2 : a); };
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
@@ -35864,13 +35892,13 @@ function _smoothGeometry(g, grow = 0) {
   switch (g.type) {
     case 'BoxGeometry':
       if (Math.min(p.width, p.height, p.depth) > 0.006 && (p.widthSegments || 1) === 1 && (p.heightSegments || 1) === 1 && (p.depthSegments || 1) === 1)
-        out = _roundedBox(p.width + Math.min(grow, p.width * 0.1), p.height + Math.min(grow, p.height * 0.1), p.depth + Math.min(grow, p.depth * 0.1),Math.min(p.width,p.height,p.depth)*.16);
+        out = _roundedBox(p.width + Math.min(grow, p.width * 0.1), p.height + Math.min(grow, p.height * 0.1), p.depth + Math.min(grow, p.depth * 0.1),Math.min(p.width,p.height,p.depth)*.16,10);
       break;
     case 'CylinderGeometry':
-      if (p.radialSegments >= 6 && p.radialSegments < 20) out = new THREE.CylinderGeometry(p.radiusTop, p.radiusBottom, p.height, 24, p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength);
+      if (p.radialSegments >= 6 && p.radialSegments < 32) out = new THREE.CylinderGeometry(p.radiusTop, p.radiusBottom, p.height, 32, p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength);
       break;
     case 'ConeGeometry':
-      if (p.radialSegments >= 6 && p.radialSegments < 20) out = new THREE.ConeGeometry(p.radius, p.height, 24, p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength);
+      if (p.radialSegments >= 6 && p.radialSegments < 32) out = new THREE.ConeGeometry(p.radius, p.height, 32, p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength);
       break;
     case 'SphereGeometry':
       if (p.widthSegments < 20 || p.heightSegments < 14) out = new THREE.SphereGeometry(p.radius, Math.max(24, p.widthSegments), Math.max(16, p.heightSegments), p.phiStart, p.phiLength, p.thetaStart, p.thetaLength);

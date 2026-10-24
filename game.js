@@ -3897,6 +3897,42 @@ let weaponSoundLastAt = {};
 let soundEventLastAt = {};
 // Master mix scale — bumped to 1.15 for a fuller mix
 const SOUND_MIX = 1.15;
+const BULLET_AUDIO_MIX = {muzzle:.2,flight:.8};
+const _bulletAirBuffers = new WeakMap();
+function usesBulletAir(id,weapon) {
+  return ['bullet','pellet','nail'].includes(projectileKind(id,weapon));
+}
+function playBulletAir(ctx,start,volume,opts={}) {
+  let buffer=_bulletAirBuffers.get(ctx);
+  if(!buffer){
+    buffer=ctx.createBuffer(1,Math.ceil(ctx.sampleRate*.5),ctx.sampleRate);
+    const data=buffer.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
+    _bulletAirBuffers.set(ctx,buffer);
+  }
+  if(!ctx._bulletAirBus){
+    const comp=ctx.createDynamicsCompressor();comp.threshold.value=-16;comp.knee.value=12;
+    comp.ratio.value=6;comp.attack.value=.004;comp.release.value=.12;
+    comp.connect(ctx.destination);ctx._bulletAirBus=comp;
+  }
+  const near=!!opts.near, speed=Math.max(30,opts.speed||150);
+  const dur=near?Math.max(.15,Math.min(.28,36/speed)):.16;
+  const peak=near?.038:.012, source=ctx.createBufferSource();source.buffer=buffer;
+  const low=ctx.createBiquadFilter();low.type='lowpass';low.Q.value=.65;
+  low.frequency.setValueAtTime(near?6200:4800,start);
+  low.frequency.exponentialRampToValueAtTime(near?850:1200,start+dur);
+  const high=ctx.createBiquadFilter();high.type='highpass';high.frequency.value=180;
+  const gain=ctx.createGain(),pan=ctx.createStereoPanner();
+  const level=Math.max(.001,Math.min(1.4,volume))*.48*BULLET_AUDIO_MIX.flight;
+  gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(level,start+peak);
+  gain.gain.exponentialRampToValueAtTime(level*.55,start+dur*.48);
+  gain.gain.exponentialRampToValueAtTime(.0001,start+dur);
+  pan.pan.setValueAtTime(opts.panStart??0,start);
+  pan.pan.linearRampToValueAtTime(opts.panEnd??.12,start+dur);
+  source.playbackRate.setValueAtTime(1.25,start);source.playbackRate.exponentialRampToValueAtTime(.72,start+dur);
+  source.connect(high).connect(low).connect(gain).connect(pan).connect(ctx._bulletAirBus);
+  source.onended=()=>{source.disconnect();high.disconnect();low.disconnect();gain.disconnect();pan.disconnect();};
+  source.start(start,Math.random()*.08);source.stop(start+dur+.01);
+}
 
 // 🎛️ Player-tweakable shoot-sound modulator (sliders in settings panel).
 // Each axis multiplies the corresponding aspect of the muzzle blast.
@@ -4437,11 +4473,13 @@ function longReport(ctx, start, outNode, volume, scale) {
 // (shared across shots, so overlapping full-auto fire is limited as a whole, not per
 // shot): makeup gain up to that level, a glue compressor, then a soft clipper that
 // holds the ceiling at the reference peak. Whole-shot level only -- the sounds
-// themselves are unchanged. GUN_BUS_GAIN is the one number that sets the level.
+// themselves are unchanged. Ordinary bullet reports use a second cached bus
+// with a 20% post-limiter gain, leaving the passing-air layer dominant.
 const GUN_BUS_KINDS = new Set(['rifle', 'auto_blast', 'auto_blast_heavy', 'pistol', 'crack', 'boom', 'ak_metal', 'smg_metal', 'p90_metal']);
 const GUN_BUS_GAIN = 25, GUN_BUS_CEIL = 0.36;   // was 0.56: with the volume high enough to hear a footstep, a shot hurt
-function gunBus(ctx) {
-  if (ctx._gunBus) return ctx._gunBus;
+function gunBus(ctx,quietBullet=false) {
+  const key=quietBullet?'_bulletMuzzleBus':'_gunBus';
+  if (ctx[key]) return ctx[key];
   const input = ctx.createGain(); input.gain.value = GUN_BUS_GAIN;
   const glue = ctx.createDynamicsCompressor();
   glue.threshold.value = -22; glue.knee.value = 8; glue.ratio.value = 6; glue.attack.value = 0.002; glue.release.value = 0.09;
@@ -4452,8 +4490,9 @@ function gunBus(ctx) {
     curve[i] = x < 0 ? -y : y;
   }
   clip.curve = curve; clip.oversample = '2x';
-  input.connect(glue).connect(clip).connect(ctx.destination);
-  return (ctx._gunBus = input);
+  const report=ctx.createGain();report.gain.value=quietBullet?BULLET_AUDIO_MIX.muzzle:1;
+  input.connect(glue).connect(clip).connect(report).connect(ctx.destination);
+  return (ctx[key] = input);
 }
 
 function playWeaponSound(idOrWeapon, opts = {}) {
@@ -4473,14 +4512,20 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   // voice, because what they have equipped is not yours to know.
   const fx = opts.remote ? null : _skinFxFor(id);
   const p = (fx && fx.sound) || weaponAudioProfile(id, base);
+  const airShot=usesBulletAir(id,base||WEAPONS.find(w=>w.id===id))&&!(fx&&fx.sound);
   const distGain = soundDistanceGain(opts.position, opts.remote);
   const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
   const mainGain = ctx.createGain();
   // Real guns go through the shared gun bus (see gunBus): mastered to the level of
   // real game gunfire. Everything else keeps its own compressor and level.
-  if (GUN_BUS_KINDS.has(p.kind)) mainGain.connect(gunBus(ctx));
-  else { const comp = ctx.createDynamicsCompressor(); mainGain.connect(comp).connect(ctx.destination); }
+  if (GUN_BUS_KINDS.has(p.kind)) mainGain.connect(gunBus(ctx,airShot));
+  else {
+    const comp = ctx.createDynamicsCompressor(),report=ctx.createGain();
+    report.gain.value=airShot?BULLET_AUDIO_MIX.muzzle:1;
+    mainGain.connect(comp).connect(report).connect(ctx.destination);
+  }
+  if(airShot&&!opts.remote)playBulletAir(ctx,start+.008,(opts.volume??1)*SOUND_MIX*SHOOT_FX.vol);
   // Send to the shared echo bus. Someone else's shot across the map gets more
   // of it than your own does, because that is what distance sounds like.
   try {
@@ -4489,7 +4534,7 @@ function playWeaponSound(idOrWeapon, opts = {}) {
     // A gun with a long report also puts far more into the room.
     const tailBoost = 1 + (p.tail || 0) * 1.1;
     // Weak on purpose -- a whisper of the room, not a second copy of the shot.
-    send.gain.value = (opts.remote ? 0.070 : 0.037) * distGain * (indoor ? 1 : 1.15) * tailBoost;
+    send.gain.value = (opts.remote ? 0.070 : 0.037) * distGain * (indoor ? 1 : 1.15) * tailBoost * (airShot?BULLET_AUDIO_MIX.muzzle:1);
     mainGain.connect(send).connect(getReverbBus(ctx, indoor));
   } catch (e) {}
   // Outdoors the crack keeps going. Indoors there is nowhere for it to go.
@@ -5112,6 +5157,10 @@ function playSoundEvent(name, opts = {}) {
   const posGain = soundDistanceGain(opts.position, opts.remote);
   const mult = (opts.volume ?? 1) * posGain * (opts.remote ? 0.8 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
+  if(name==='bullet_whiz') {
+    playBulletAir(ctx,start,mult,{near:true,speed:opts.speed,panStart:opts.panStart,panEnd:opts.panEnd});
+    return;
+  }
   const out = ctx.createGain();
   const comp = ctx.createDynamicsCompressor();
   out.connect(comp).connect(ctx.destination);
@@ -39820,13 +39869,17 @@ function updateRecoil(dt) {
   camera.quaternion.setFromEuler(euler);
 }
 
-function registerNearMiss(pos, speed = 120) {
+function registerNearMiss(pos, speed = 120, direction = null) {
   const now = performance.now();
   if (now - _lastNearMissAt < 130) return;
   _lastNearMissAt = now;
   _nearMissUntil = Math.max(_nearMissUntil, now + 180);
   const loudness = Math.min(1.2, 0.55 + speed / 280);
-  playSoundEvent('bullet_whiz', { position: pos, volume: loudness, minGap: 80 });
+  const right=new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion);
+  const side=THREE.MathUtils.clamp(pos.clone().sub(camera.position).dot(right)/1.35,-1,1);
+  const sweep=direction?THREE.MathUtils.clamp(direction.dot(right),-1,1):.6;
+  playSoundEvent('bullet_whiz', { position: pos, volume: loudness, minGap: 80,speed,
+    panStart:THREE.MathUtils.clamp(side*.5-sweep*.6,-1,1),panEnd:THREE.MathUtils.clamp(side*.5+sweep*.6,-1,1) });
   flashScreen('rgba(255,255,255,0.055)', 80);
 }
 
@@ -55939,8 +55992,9 @@ function updateBullets(dt) {
             removeBullet();
             continue;
           }
-          if (closestD2 < 1.35 * 1.35 && closestT <= wallHitT) {
-            registerNearMiss(new THREE.Vector3(px0 + tDx * closestT, py0 + tDy * closestT, pz0 + tDz * closestT), b.speed);
+          if (!b._passByPlayed && usesBulletAir(b.weaponId,projectileWeaponSpec(b.weaponId)) && closestD2 < 1.35 * 1.35 && closestT <= wallHitT) {
+            b._passByPlayed=true;
+            registerNearMiss(new THREE.Vector3(px0 + tDx * closestT, py0 + tDy * closestT, pz0 + tDz * closestT), b.speed,b.dir);
           }
         }
         if (wallHit && !b.isOwn) {

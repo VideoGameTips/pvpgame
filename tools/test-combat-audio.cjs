@@ -18,6 +18,7 @@ function wav(channels,rate){
     page.on('pageerror',e=>errors.push(e.message));
     await page.goto(process.env.PVE_URL||'http://localhost:4179/',{waitUntil:'load'});
     await page.waitForFunction(()=>typeof weaponModels!=='undefined'&&weaponModels.length);
+    await page.waitForFunction(()=>gunShotSample.buffer||gunShotSample.failed);
     const results=await page.evaluate(async()=>{
       const rate=24000,original=audioCtx,random=Math.random,mix=BULLET_AUDIO_MIX.muzzle;
       const energy=(data,a,b)=>{
@@ -36,6 +37,8 @@ function wav(channels,rate){
         }return max;
       };
       try{
+        if(!gunShotSample.buffer || gunShotSample.failed)throw Error('Uploaded MP3 did not decode');
+        if(gunShotSample.buffer.duration<2.9 || gunShotSample.buffer.duration>3.1)throw Error('Wrong uploaded recording');
         const old=await render(ctx=>{BULLET_AUDIO_MIX.muzzle=.2;playTone(ctx,.02,.12,gunBus(ctx,true),330,100,.02,'triangle');});
         const loud=await render(ctx=>{BULLET_AUDIO_MIX.muzzle=mix;playTone(ctx,.02,.12,gunBus(ctx,true),330,100,.02,'triangle');});
         const ratio=energy(loud.getChannelData(0),0,.4)/energy(old.getChannelData(0),0,.4);
@@ -64,7 +67,11 @@ function wav(channels,rate){
         }
         const gunLevels={};
         for(const id of ['ak20','pistol','sg8','srx','minigun']){
-          const b=await render(()=>playWeaponSound(id,{minGap:0,baseWeapon:WEAPONS.find(w=>w.id===id)}));
+          const b=await render(ctx=>{
+            playWeaponSound(id,{minGap:0,baseWeapon:WEAPONS.find(w=>w.id===id)});
+            if(ctx._gunShotSampleVoices?.length!==1 || ctx._gunShotSampleVoices[0].source.buffer!==gunShotSample.buffer)throw Error('Recording not used by '+id);
+            if(ctx._bulletAirBus || ctx._bulletMuzzleBus)throw Error('Procedural shot layered over recording '+id);
+          });
           const p=peak(b);if(p<.02||p>.95)throw Error('Gun silent or clipping '+id+': '+p);gunLevels[id]=p;
         }
         const burst=await render(ctx=>{
@@ -77,6 +84,29 @@ function wav(channels,rate){
           }
         },2);
         if(peak(burst)>.95)throw Error('Clipping rapid fire '+peak(burst));
+        const sampleBurst=await render(ctx=>{
+          for(let i=0;i<30;i++)playGunShotSample(ctx,.02+i*.045,1.15,{kind:'ak_metal'});
+          if(ctx._gunShotSampleVoices.length>16)throw Error('Unlimited sample overlap');
+        },3.3);
+        if(peak(sampleBurst)>.7)throw Error('Sample burst clips '+peak(sampleBurst));
+        const sample=gunShotSample.buffer;
+        try{
+          gunShotSample.buffer=null;
+          const fallback=await render(()=>playWeaponSound('pistol',{minGap:0}));
+          if(peak(fallback)<.02)throw Error('Missing sample silences weapon');
+        }finally{gunShotSample.buffer=sample;}
+        await render(ctx=>{
+          playWeaponSound('storm_bloom',{minGap:0});
+          if(ctx._gunShotSampleBus)throw Error('Recording replaced special weapon voice');
+        });
+        const skinFx=_skinFxFor;
+        try{
+          _skinFxFor=()=>({sound:{kind:'beep',f1:800,f2:600,dur:.1,vol:.1}});
+          await render(ctx=>{
+            playWeaponSound('pistol',{minGap:0});
+            if(ctx._gunShotSampleBus)throw Error('Recording replaced skin voice');
+          });
+        }finally{_skinFxFor=skinFx;}
         const event=playSoundEvent,number=spawnHitNumber,calls=[];
         try{
           playSoundEvent=(name,opts)=>calls.push({name,...opts});spawnHitNumber=()=>{};
@@ -98,7 +128,7 @@ function wav(channels,rate){
           playTargetImpact(ctx,.7,.92,'yellow');playTargetImpact(ctx,1.15,1.2,'blue',true);
           playBulletAir(ctx,1.65,1,{near:true,speed:150,panStart:-.95,panEnd:.95});
         },2.3);
-        return {ratio,whizzDominance,gunLevels,slapPeak:peak(hit),headshotPeak:peak(head),burstPeak:peak(burst),nearMissOnce:true,rate,
+        return {ratio,whizzDominance,gunLevels,sampleBurstPeak:peak(sampleBurst),sampleDecoded:true,slapPeak:peak(hit),headshotPeak:peak(head),burstPeak:peak(burst),nearMissOnce:true,rate,
           channels:[...Array(2)].map((_,i)=>Array.from(demo.getChannelData(i)))};
       }finally{audioCtx=original;Math.random=random;BULLET_AUDIO_MIX.muzzle=mix;_revBus.indoor=_revBus.outdoor=null;}
     });

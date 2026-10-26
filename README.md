@@ -74,9 +74,13 @@ metal, polymer, wood and dark recesses separate. `weapon-finish.js` mounts small
 receiver hardware on thirteen default guns, batched into three meshes per gun
 so it follows the original moving part without changing handling or stats.
 
-Combat audio puts a broad, fast passing-air rush ahead of a bright, bass-cut
-muzzle bang, with directional near misses and a shared flight-volume ceiling.
-The air swells at closest approach without a resonant whistle or pitch glide.
+Ordinary gunshots use the user-provided recording in `audio/ballistic-shot.mp3`
+(original filename `A_single_shot_from_a_#3-1792981451433.mp3`). Playback skips
+the quiet lead-in and fades the tail, with a shared limiter and 16-voice cap.
+It replaces, rather than doubles, the procedural outgoing shot layers.
+If decoding fails, the procedural bang/air rush remains available as a fallback.
+Directional near misses retain a broad passing-air swell without a resonant
+whistle or pitch glide.
 Confirmed hits use a dry slap/thump, with a sharper
 critical variant; noncombat UI cues and special skin voices are retained.
 `node tools/test-combat-audio.cjs` uses Playwright and offline Web Audio renders

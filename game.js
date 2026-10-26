@@ -3898,6 +3898,41 @@ let soundEventLastAt = {};
 // Master mix scale — bumped to 1.15 for a fuller mix
 const SOUND_MIX = 1.15;
 const BULLET_AUDIO_MIX = {muzzle:.24,flight:1};
+const gunShotSample = {buffer:null,failed:false,offset:.085,duration:1.75};
+new THREE.AudioLoader().load('audio/ballistic-shot.mp3',buffer=>{
+  gunShotSample.buffer=buffer;
+},undefined,()=>{gunShotSample.failed=true;});
+
+function playGunShotSample(ctx,start,volume,profile,remote=false) {
+  const buffer=gunShotSample.buffer;
+  if(!buffer)return false;
+  if(!ctx._gunShotSampleBus){
+    const input=ctx.createGain(),comp=ctx.createDynamicsCompressor(),ceiling=ctx.createWaveShaper();
+    comp.threshold.value=-16;comp.knee.value=10;comp.ratio.value=5;comp.attack.value=.002;comp.release.value=.09;
+    ceiling.curve=Float32Array.from({length:2048},(_,i)=>.5*Math.tanh((i/2047*2-1)/.5));
+    ceiling.oversample='2x';input.connect(comp).connect(ceiling).connect(ctx.destination);
+    ctx._gunShotSampleBus=input;ctx._gunShotSampleVoices=[];
+  }
+  const voices=ctx._gunShotSampleVoices;
+  while(voices.length>=16){
+    const old=voices.shift();old.gain.gain.cancelScheduledValues(start);
+    old.gain.gain.setTargetAtTime(0,start,.004);old.source.stop(start+.018);
+  }
+  const source=ctx.createBufferSource(),gain=ctx.createGain();source.buffer=buffer;
+  const pitch=profile.kind==='boom'?.94:profile.kind==='crack'?.97:1;
+  source.playbackRate.value=pitch*SHOOT_FX.pitch;
+  const duration=Math.min(gunShotSample.duration,buffer.duration-gunShotSample.offset);
+  const end=start+duration/source.playbackRate.value;
+  const level=Math.max(0,Math.min(1.5,volume*SHOOT_FX.vol))*(remote?.65:.85);
+  gain.gain.setValueAtTime(0,start);gain.gain.linearRampToValueAtTime(level,start+.002);
+  gain.gain.setValueAtTime(level,Math.max(start+.002,end-.04));gain.gain.linearRampToValueAtTime(0,end);
+  source.connect(gain).connect(ctx._gunShotSampleBus);
+  const voice={source,gain};voices.push(voice);
+  source.onended=()=>{source.disconnect();gain.disconnect();const i=voices.indexOf(voice);if(i>=0)voices.splice(i,1);};
+  source.start(start,gunShotSample.offset,duration);
+  return true;
+}
+
 const _bulletAirBuffers = new WeakMap();
 function usesBulletAir(id,weapon) {
   return ['bullet','pellet','nail'].includes(projectileKind(id,weapon));
@@ -4549,6 +4584,7 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   const distGain = soundDistanceGain(opts.position, opts.remote);
   const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
+  if(airShot && playGunShotSample(ctx,start,mult,p,opts.remote))return;
   const mainGain = ctx.createGain();
   // Real guns go through the shared gun bus (see gunBus): mastered to the level of
   // real game gunfire. Everything else keeps its own compressor and level.

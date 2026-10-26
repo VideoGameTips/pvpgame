@@ -3897,7 +3897,7 @@ let weaponSoundLastAt = {};
 let soundEventLastAt = {};
 // Master mix scale — bumped to 1.15 for a fuller mix
 const SOUND_MIX = 1.15;
-const BULLET_AUDIO_MIX = {muzzle:.2,flight:.8};
+const BULLET_AUDIO_MIX = {muzzle:.75,flight:.8};
 const _bulletAirBuffers = new WeakMap();
 function usesBulletAir(id,weapon) {
   return ['bullet','pellet','nail'].includes(projectileKind(id,weapon));
@@ -3915,23 +3915,46 @@ function playBulletAir(ctx,start,volume,opts={}) {
     comp.connect(ctx.destination);ctx._bulletAirBus=comp;
   }
   const near=!!opts.near, speed=Math.max(30,opts.speed||150);
-  const dur=near?Math.max(.15,Math.min(.28,36/speed)):.16;
-  const peak=near?.038:.012, source=ctx.createBufferSource();source.buffer=buffer;
+  const dur=near?Math.max(.16,Math.min(.28,36/speed)):.115;
+  const peak=near?dur*.23:.009, source=ctx.createBufferSource();source.buffer=buffer;
   const low=ctx.createBiquadFilter();low.type='lowpass';low.Q.value=.65;
-  low.frequency.setValueAtTime(near?6200:4800,start);
-  low.frequency.exponentialRampToValueAtTime(near?850:1200,start+dur);
-  const high=ctx.createBiquadFilter();high.type='highpass';high.frequency.value=180;
+  low.frequency.setValueAtTime(near?7400:5200,start);
+  low.frequency.exponentialRampToValueAtTime(near?1000:1800,start+dur);
+  const high=ctx.createBiquadFilter();high.type='highpass';high.frequency.value=near?380:700;
+  const body=ctx.createBiquadFilter();body.type='bandpass';body.Q.value=1.1;
+  body.frequency.setValueAtTime(near?3300:2800,start);
+  body.frequency.exponentialRampToValueAtTime(near?620:1300,start+dur);
+  const bodyGain=ctx.createGain();bodyGain.gain.value=near?.5:.18;
   const gain=ctx.createGain(),pan=ctx.createStereoPanner();
-  const level=Math.max(.001,Math.min(1.4,volume))*.48*BULLET_AUDIO_MIX.flight;
+  const level=Math.max(.001,Math.min(1.4,volume))*(near?.58:.17)*BULLET_AUDIO_MIX.flight;
   gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(level,start+peak);
   gain.gain.exponentialRampToValueAtTime(level*.55,start+dur*.48);
   gain.gain.exponentialRampToValueAtTime(.0001,start+dur);
   pan.pan.setValueAtTime(opts.panStart??0,start);
   pan.pan.linearRampToValueAtTime(opts.panEnd??.12,start+dur);
-  source.playbackRate.setValueAtTime(1.25,start);source.playbackRate.exponentialRampToValueAtTime(.72,start+dur);
+  source.playbackRate.setValueAtTime(near?1.5:1.2,start);source.playbackRate.exponentialRampToValueAtTime(near?.65:.85,start+dur);
   source.connect(high).connect(low).connect(gain).connect(pan).connect(ctx._bulletAirBus);
-  source.onended=()=>{source.disconnect();high.disconnect();low.disconnect();gain.disconnect();pan.disconnect();};
+  high.connect(body).connect(bodyGain).connect(gain);
+  source.onended=()=>{source.disconnect();high.disconnect();low.disconnect();body.disconnect();bodyGain.disconnect();gain.disconnect();pan.disconnect();};
   source.start(start,Math.random()*.08);source.stop(start+dur+.01);
+}
+
+function playTargetImpact(ctx,start,volume,tier,critical=false) {
+  if(!ctx._targetImpactBus){
+    const input=ctx.createGain(),comp=ctx.createDynamicsCompressor(),clip=ctx.createWaveShaper();
+    comp.threshold.value=-13;comp.knee.value=8;comp.ratio.value=5;comp.attack.value=.001;comp.release.value=.07;
+    clip.curve=Float32Array.from({length:2048},(_,i)=>.65*Math.tanh((i/2047*2-1)/.65));
+    clip.oversample='2x';input.connect(comp).connect(clip).connect(ctx.destination);ctx._targetImpactBus=input;
+  }
+  const out=ctx._targetImpactBus,k=(HIT_TIERS[tier]||HIT_TIERS.yellow).click;
+  const v=Math.min(1.5,Math.max(0,volume))*(critical?1.12:1);
+  // Broadband palm-like contact, a short chesty body, then a quieter second contact.
+  playFilteredNoise(ctx,start,.012,out,.40*v,'highpass',2300*k,.55,.0002,1.8);
+  playSweptNoise(ctx,start+.001,.065,out,.62*v,'bandpass',1500*k,620,.7,2.2);
+  playFilteredNoise(ctx,start+.007,.043,out,.30*v,'lowpass',850,.7,.0005,2.4);
+  playFilteredNoise(ctx,start+.018,.023,out,.16*v,'bandpass',1900,.65,.0003,2.4);
+  playTone(ctx,start,.048,out,175,68,.16*v,'sine');
+  if(critical)playFilteredNoise(ctx,start+.003,.009,out,.24*v,'bandpass',4100,.6,.0002,2);
 }
 
 // 🎛️ Player-tweakable shoot-sound modulator (sliders in settings panel).
@@ -4473,12 +4496,12 @@ function longReport(ctx, start, outNode, volume, scale) {
 // (shared across shots, so overlapping full-auto fire is limited as a whole, not per
 // shot): makeup gain up to that level, a glue compressor, then a soft clipper that
 // holds the ceiling at the reference peak. Whole-shot level only -- the sounds
-// themselves are unchanged. Ordinary bullet reports use a second cached bus
-// with a 20% post-limiter gain, leaving the passing-air layer dominant.
+// Ordinary bullet reports use a second cached bus with a brighter attack EQ
+// and their own post-limiter level, separate from the passing-air layer.
 const GUN_BUS_KINDS = new Set(['rifle', 'auto_blast', 'auto_blast_heavy', 'pistol', 'crack', 'boom', 'ak_metal', 'smg_metal', 'p90_metal']);
 const GUN_BUS_GAIN = 25, GUN_BUS_CEIL = 0.36;   // was 0.56: with the volume high enough to hear a footstep, a shot hurt
-function gunBus(ctx,quietBullet=false) {
-  const key=quietBullet?'_bulletMuzzleBus':'_gunBus';
+function gunBus(ctx,bulletReport=false) {
+  const key=bulletReport?'_bulletMuzzleBus':'_gunBus';
   if (ctx[key]) return ctx[key];
   const input = ctx.createGain(); input.gain.value = GUN_BUS_GAIN;
   const glue = ctx.createDynamicsCompressor();
@@ -4490,8 +4513,14 @@ function gunBus(ctx,quietBullet=false) {
     curve[i] = x < 0 ? -y : y;
   }
   clip.curve = curve; clip.oversample = '2x';
-  const report=ctx.createGain();report.gain.value=quietBullet?BULLET_AUDIO_MIX.muzzle:1;
-  input.connect(glue).connect(clip).connect(report).connect(ctx.destination);
+  const report=ctx.createGain();report.gain.value=bulletReport?BULLET_AUDIO_MIX.muzzle:1;
+  if(bulletReport){
+    const rumble=ctx.createBiquadFilter(),presence=ctx.createBiquadFilter();
+    rumble.type='highpass';rumble.frequency.value=75;rumble.Q.value=.65;
+    presence.type='highshelf';presence.frequency.value=2100;presence.gain.value=3;
+    input.connect(rumble).connect(presence).connect(glue);
+  }else input.connect(glue);
+  glue.connect(clip).connect(report).connect(ctx.destination);
   return (ctx[key] = input);
 }
 
@@ -5166,6 +5195,10 @@ function playSoundEvent(name, opts = {}) {
   const start = ctx.currentTime + 0.002;
   if(name==='bullet_whiz') {
     playBulletAir(ctx,start,mult,{near:true,speed:opts.speed,panStart:opts.panStart,panEnd:opts.panEnd});
+    return;
+  }
+  if(opts.impact && (name==='hitmarker'||name==='headshot')){
+    playTargetImpact(ctx,start,mult,opts.tier,name==='headshot');
     return;
   }
   const out = ctx.createGain();
@@ -55425,7 +55458,7 @@ function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss
   if (damage > 0) {
     const crit = headshot;
     playSoundEvent(crit ? 'headshot' : 'hitmarker', {
-      volume: crit ? 1.1 : 0.8, minGap: crit ? 60 : 35, tier,
+      volume: crit ? 1.1 : 0.8, minGap: crit ? 60 : 35, tier, impact:true,
     });
   }
   return tier;

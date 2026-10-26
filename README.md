@@ -74,6 +74,12 @@ metal, polymer, wood and dark recesses separate. `weapon-finish.js` mounts small
 receiver hardware on thirteen default guns, batched into three meshes per gun
 so it follows the original moving part without changing handling or stats.
 
+Combat audio separates the bright muzzle report, short outgoing air rush and
+directional near-miss whizz. Confirmed hits use a dry slap/thump, with a sharper
+critical variant; noncombat UI cues and special skin voices are retained.
+`node tools/test-combat-audio.cjs` uses Playwright and offline Web Audio renders
+to check output levels, rapid-fire headroom, stereo passes and combat events.
+
 ## Credits
 
 Original PVP Arena by VideoGameTips. Three.js is bundled under its MIT license.

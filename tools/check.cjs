@@ -10,7 +10,8 @@ for (const file of fs.readdirSync('.').filter(f => f.endsWith('.js') && f !== 't
 const html = fs.readFileSync('index.html', 'utf8');
 for (const match of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
   const asset = match[1]; if (/^(https?:|data:|#)/.test(asset)) continue;
-  if (asset.startsWith('/') || !fs.existsSync(asset)) throw Error('Invalid static asset: ' + asset);
+  const localPath = decodeURIComponent(new URL(asset, 'http://localhost/').pathname).slice(1);
+  if (asset.startsWith('/') || !fs.existsSync(localPath)) throw Error('Invalid static asset: ' + asset);
 }
 if (fs.existsSync('users.json') || fs.existsSync('server.js') || fs.existsSync('socket.io.min.js')) throw Error('Live server files must not ship');
 console.log('PASS: syntax, relative assets, no application network transports, no live-server data');

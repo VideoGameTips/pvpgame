@@ -39,13 +39,16 @@ function wav(channels,rate){
         const old=await render(ctx=>{BULLET_AUDIO_MIX.muzzle=.2;playTone(ctx,.02,.12,gunBus(ctx,true),330,100,.02,'triangle');});
         const loud=await render(ctx=>{BULLET_AUDIO_MIX.muzzle=mix;playTone(ctx,.02,.12,gunBus(ctx,true),330,100,.02,'triangle');});
         const ratio=energy(loud.getChannelData(0),0,.4)/energy(old.getChannelData(0),0,.4);
-        if(Math.abs(ratio-3.75)>.01)throw Error('Muzzle gain not increased correctly '+ratio);
+        if(Math.abs(ratio-mix/.2)>.01)throw Error('Muzzle gain incorrect '+ratio);
         const pass=await render(ctx=>playBulletAir(ctx,.02,1,{near:true,speed:150,panStart:-.9,panEnd:.9}));
         const l=pass.getChannelData(0),r=pass.getChannelData(1);
         if(energy(l,.03,.08)<=energy(r,.03,.08)||energy(r,.18,.24)<=energy(l,.18,.24))throw Error('Whizz does not sweep across listener');
         if(energy(l,.32,.5)>.0001)throw Error('Whizz tail hangs');
         const outgoing=await render(ctx=>playBulletAir(ctx,.02,1));
-        if(energy(outgoing.getChannelData(0),.16,.4)>.0001)throw Error('Outgoing rush too long');
+        if(energy(outgoing.getChannelData(0),.26,.4)>.0001)throw Error('Outgoing rush too long');
+        const report=await render(ctx=>playMuzzleBlast(ctx,.02,gunBus(ctx,true),'ak_metal',.24*SOUND_MIX));
+        const whizzDominance=energy(outgoing.getChannelData(0),0,.3)/energy(report.getChannelData(0),0,.3);
+        if(whizzDominance<1.5)throw Error('Muzzle still masks whizz '+whizzDominance);
         const hit=await render(()=>playSoundEvent('hitmarker',{volume:.8,impact:true,tier:'yellow',minGap:0}));
         const head=await render(()=>playSoundEvent('headshot',{volume:1.1,impact:true,tier:'blue',minGap:0}));
         if(peak(hit)<.05 || peak(head)<peak(hit))throw Error('Impacts silent or critical weaker');
@@ -89,12 +92,12 @@ function wav(channels,rate){
           playTargetImpact(ctx,.7,.92,'yellow');playTargetImpact(ctx,1.15,1.2,'blue',true);
           playBulletAir(ctx,1.65,1,{near:true,speed:150,panStart:-.95,panEnd:.95});
         },2.3);
-        return {ratio,gunLevels,slapPeak:peak(hit),headshotPeak:peak(head),burstPeak:peak(burst),nearMissOnce:true,rate,
+        return {ratio,whizzDominance,gunLevels,slapPeak:peak(hit),headshotPeak:peak(head),burstPeak:peak(burst),nearMissOnce:true,rate,
           channels:[...Array(2)].map((_,i)=>Array.from(demo.getChannelData(i)))};
       }finally{audioCtx=original;Math.random=random;BULLET_AUDIO_MIX.muzzle=mix;_revBus.indoor=_revBus.outdoor=null;}
     });
     fs.writeFileSync('/tmp/combat-audio-preview.wav',wav(results.channels,results.rate));delete results.channels;
     console.log(results);if(errors.length)throw Error(errors.join('\n'));
-    console.log('PASS: louder muzzle, stereo whizz, short target slap, critical distinction, clean rapid fire, combat wiring and once-only near misses');
+    console.log('PASS: bright muzzle, dominant stereo whizz, short target slap, critical distinction, clean rapid fire, combat wiring and once-only near misses');
   }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

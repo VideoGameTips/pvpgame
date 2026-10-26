@@ -3897,7 +3897,7 @@ let weaponSoundLastAt = {};
 let soundEventLastAt = {};
 // Master mix scale — bumped to 1.15 for a fuller mix
 const SOUND_MIX = 1.15;
-const BULLET_AUDIO_MIX = {muzzle:.75,flight:.8};
+const BULLET_AUDIO_MIX = {muzzle:.24,flight:1};
 const _bulletAirBuffers = new WeakMap();
 function usesBulletAir(id,weapon) {
   return ['bullet','pellet','nail'].includes(projectileKind(id,weapon));
@@ -3912,27 +3912,29 @@ function playBulletAir(ctx,start,volume,opts={}) {
   if(!ctx._bulletAirBus){
     const comp=ctx.createDynamicsCompressor();comp.threshold.value=-16;comp.knee.value=12;
     comp.ratio.value=6;comp.attack.value=.004;comp.release.value=.12;
-    comp.connect(ctx.destination);ctx._bulletAirBus=comp;
+    const ceiling=ctx.createWaveShaper();
+    ceiling.curve=Float32Array.from({length:2048},(_,i)=>.46*Math.tanh((i/2047*2-1)/.46));
+    ceiling.oversample='2x';comp.connect(ceiling).connect(ctx.destination);ctx._bulletAirBus=comp;
   }
   const near=!!opts.near, speed=Math.max(30,opts.speed||150);
-  const dur=near?Math.max(.16,Math.min(.28,36/speed)):.115;
-  const peak=near?dur*.23:.009, source=ctx.createBufferSource();source.buffer=buffer;
+  const dur=near?Math.max(.16,Math.min(.28,36/speed)):.19;
+  const peak=near?dur*.23:.024, source=ctx.createBufferSource();source.buffer=buffer;
   const low=ctx.createBiquadFilter();low.type='lowpass';low.Q.value=.65;
-  low.frequency.setValueAtTime(near?7400:5200,start);
-  low.frequency.exponentialRampToValueAtTime(near?1000:1800,start+dur);
-  const high=ctx.createBiquadFilter();high.type='highpass';high.frequency.value=near?380:700;
-  const body=ctx.createBiquadFilter();body.type='bandpass';body.Q.value=1.1;
-  body.frequency.setValueAtTime(near?3300:2800,start);
-  body.frequency.exponentialRampToValueAtTime(near?620:1300,start+dur);
-  const bodyGain=ctx.createGain();bodyGain.gain.value=near?.5:.18;
+  low.frequency.setValueAtTime(8200,start);
+  low.frequency.exponentialRampToValueAtTime(near?1600:2400,start+dur);
+  const high=ctx.createBiquadFilter();high.type='highpass';high.frequency.value=near?650:900;
+  const body=ctx.createBiquadFilter();body.type='bandpass';body.Q.value=2.2;
+  body.frequency.setValueAtTime(near?5800:6500,start);
+  body.frequency.exponentialRampToValueAtTime(near?1100:1600,start+dur);
+  const bodyGain=ctx.createGain();bodyGain.gain.value=1.25;
   const gain=ctx.createGain(),pan=ctx.createStereoPanner();
-  const level=Math.max(.001,Math.min(1.4,volume))*(near?.58:.17)*BULLET_AUDIO_MIX.flight;
+  const level=Math.max(.001,Math.min(1.4,volume))*(near?.66:.62)*BULLET_AUDIO_MIX.flight;
   gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(level,start+peak);
   gain.gain.exponentialRampToValueAtTime(level*.55,start+dur*.48);
   gain.gain.exponentialRampToValueAtTime(.0001,start+dur);
-  pan.pan.setValueAtTime(opts.panStart??0,start);
-  pan.pan.linearRampToValueAtTime(opts.panEnd??.12,start+dur);
-  source.playbackRate.setValueAtTime(near?1.5:1.2,start);source.playbackRate.exponentialRampToValueAtTime(near?.65:.85,start+dur);
+  pan.pan.setValueAtTime(opts.panStart??-.18,start);
+  pan.pan.linearRampToValueAtTime(opts.panEnd??.28,start+dur);
+  source.playbackRate.setValueAtTime(1.65,start);source.playbackRate.exponentialRampToValueAtTime(.75,start+dur);
   source.connect(high).connect(low).connect(gain).connect(pan).connect(ctx._bulletAirBus);
   high.connect(body).connect(bodyGain).connect(gain);
   source.onended=()=>{source.disconnect();high.disconnect();low.disconnect();body.disconnect();bodyGain.disconnect();gain.disconnect();pan.disconnect();};
@@ -4516,8 +4518,8 @@ function gunBus(ctx,bulletReport=false) {
   const report=ctx.createGain();report.gain.value=bulletReport?BULLET_AUDIO_MIX.muzzle:1;
   if(bulletReport){
     const rumble=ctx.createBiquadFilter(),presence=ctx.createBiquadFilter();
-    rumble.type='highpass';rumble.frequency.value=75;rumble.Q.value=.65;
-    presence.type='highshelf';presence.frequency.value=2100;presence.gain.value=3;
+    rumble.type='highpass';rumble.frequency.value=850;rumble.Q.value=.65;
+    presence.type='highshelf';presence.frequency.value=2400;presence.gain.value=5.5;
     input.connect(rumble).connect(presence).connect(glue);
   }else input.connect(glue);
   glue.connect(clip).connect(report).connect(ctx.destination);

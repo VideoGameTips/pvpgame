@@ -15,6 +15,7 @@
   <meta property="og:url" content="https://videogametips.github.io/pvpgame/" />
   <link rel="stylesheet" href="underworld.css" />
   <link rel="stylesheet" href="backrooms.css" />
+  <link rel="stylesheet" href="stealth-showroom.css?v=a6b8e6ce6c15" />
   <link rel="preload" href="audio/ballistic-shot.mp3" as="fetch" type="audio/mpeg" crossorigin="anonymous" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -237,7 +238,7 @@
       flex-shrink: 0; min-height: 44px; padding: 6px 14px; background: #222; color: #ddd; border: 1px solid #666;
       border-radius: 4px; cursor: pointer; font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 2px;
     }
-    #mode-tools { flex: 1 1 100%; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    #mode-tools { flex: 1 1 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
     #mode-tools button {
       min-width: 0; min-height: 48px; padding: 4px 2px; display: flex; flex-direction: column; align-items: center;
       justify-content: center; gap: 2px; background: #15151c; color: #ddd; border: 1px solid #34343f; border-radius: 6px;
@@ -1150,6 +1151,7 @@
     </div>
     <div id="auth-status" style="color:#ccc;font-size:12px;margin:6px 0;min-height:14px;"></div>
     <button id="play-btn">PLAY</button>
+    <button id="stealth-login-btn" class="st-login">STEALTH COLLECTION</button>
     <div id="welcome-back" style="color:#88ccff;font-size:11px;margin-top:8px;display:none;letter-spacing:1px;"></div>
   </div>
 
@@ -1167,6 +1169,7 @@
         <button id="open-shop-btn"><span class="ic">🛒</span>SHOP</button>
         <button id="skins-btn"><span class="ic">🎭</span>SKINS</button>
         <button id="weapon-skins-btn"><span class="ic">🎨</span>GUN SKINS</button>
+        <button id="stealth-open-btn">STEALTH</button>
         <button id="char-chat-btn"><span class="ic">💬</span>CHAT</button>
         <button id="more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu"><span class="ic">⋯</span>MORE</button>
       </div>
@@ -1593,8 +1596,9 @@
   <script src="warehouse-map.js?v=57d4e13d461e"></script>
   <script src="refinery-detail.js?v=b2dc038b0355"></script>
   <script src="weapon-finish.js?v=39f750e0a4ec"></script>
-  <script src="stealth-series.js?v=ff37ea822a9d"></script>
-  <script src="game.js?v=6d3f8c4a86e8"></script>
+  <script src="stealth-series.js?v=63f3f99bd95c"></script>
+  <script src="stealth-showroom.js?v=998a0c550c54"></script>
+  <script src="game.js?v=b3d0a97d7c13"></script>
   <script src="underworld-adapter.js"></script>
   <script src="backrooms-data.js"></script>
   <script src="backrooms.js"></script>

@@ -69169,7 +69169,7 @@ document.addEventListener('langchange', () => {
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
 const DIALOG_IDS = ['settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
-                    'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel','weapon-inspect-panel'];
+                    'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel','weapon-inspect-panel','stealth-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
 }
@@ -70460,6 +70460,7 @@ function openWeaponSkinsPanel() {
       <div style="font-size:18px;letter-spacing:3px;color:#ffdd88;">🎨 GUN SKINS</div>
       <button id="ws-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
     </div>
+    <button id="ws-stealth-open" style="width:100%;min-height:44px;background:#243a3e;color:#e9f4f1;border:1px solid #a1bcb8;border-radius:4px;font:inherit;cursor:pointer;">Stealth Collection</button>
     ${modelSkinSection()}
     ${meleeModelSkinSection()}
     ${supportModelSkinSection()}
@@ -70473,6 +70474,7 @@ function openWeaponSkinsPanel() {
     ${basicCaseSection()}
   `;
   const pxBtn = panel.querySelector('#ws-pixelizer');
+  panel.querySelector('#ws-stealth-open').onclick=()=>PVE_STEALTH_SHOWROOM.open();
   if (pxBtn) pxBtn.addEventListener('click', () => { panel.style.display = 'none'; openSkinPixelizer('gun'); });
   const ideaBtn = panel.querySelector('#ws-idea');
   if (ideaBtn) ideaBtn.addEventListener('click', () => { panel.style.display = 'none'; openIdeaDialog(); });

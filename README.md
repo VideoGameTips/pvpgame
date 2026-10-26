@@ -73,11 +73,18 @@ flanges, valve wheels and numbered maintenance plates to final map geometry.
 
 ## Stealth Series
 
+Open STEALTH COLLECTION below PLAY, or STEALTH on the mode screen. The collection
+has rotating real-model previews, Equip and Try in Range. The range shortcut
+starts the local profile if necessary and puts the selected weapon in hand,
+including secondary weapons. Selections persist in this fork's local storage.
+The same collection is accessible at the top of Gun Skins.
+
 Select Stealth Cipher for the Handgun, Stealth Ghostline for AK-20, or Stealth
-Longwatch for SR-X in the weapon's model-skin panel. These are unlocked in the
+Longwatch for SR-X. These are unlocked in the
 local PvE sandbox. `stealth-series.js` preserves ammunition, damage and reload
 timings while adding polished steel hardware, hollow suppressors, clamped
-optics, working magazines/charging actions and an exposed moving return spring.
+optics with knurled controls, engraved receiver plates, working magazines,
+textured charging handles and an exposed moving return spring.
 The red laser stops at map colliders and hides during inspection, reloads and
 alternate camera views. Longwatch has a red etched scope reticle. It grants no
 damage, targeting or through-wall vision changes.
@@ -86,6 +93,9 @@ damage, targeting or through-wall vision changes.
 Refinery fittings, skin mechanics, laser obstruction, the scope reticle, and
 actual firing/rendering on desktop and mobile. `UPDATE_PREVIEW=1` refreshes the
 two map thumbnails.
+`node tools/test-stealth-showroom.cjs` tests the visible login/mode-screen entry
+points, previews, rotation, equipping, persistence, direct range launch and the
+mobile collection layout.
 
 ## Weapon Finish
 

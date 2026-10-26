@@ -61,6 +61,34 @@
         gpBox(g,dark,.00025,.0006,.0028,side*(face+.00075),pistol?.012:.015,(pistol?-.06:-.11)+i*.021);
       }
     }
+    const legend=document.createElement('canvas');legend.width=512;legend.height=128;
+    const ink=legend.getContext('2d');ink.fillStyle='#263438';ink.fillRect(0,0,512,128);
+    ink.fillStyle='#b1c1c2';ink.font='bold 46px monospace';ink.fillText(pistol?'CIPHER // 01':sniper?'LONGWATCH // 03':'GHOSTLINE // 02',20,59,472);
+    ink.font='22px monospace';ink.fillStyle='#718a8b';ink.fillText('STL / PRECISION SYSTEMS',20,100,472);
+    const marking=new THREE.MeshStandardMaterial({map:new THREE.CanvasTexture(legend),metalness:.86,roughness:.28,color:0xffffff});
+    marking.userData.metalDone=true;marking.userData.weaponMaterial='steel';
+    for(const side of [-1,1]){
+      const plaque=new THREE.Mesh(new THREE.PlaneGeometry(pistol?.055:.13,pistol?.014:.031),marking);
+      plaque.position.set(side*(pistol?.0123:sniper?.0202:.0262),pistol?-.007:-.015,pistol?-.015:-.025);plaque.rotation.y=side*Math.PI/2;
+      plaque.userData.stealthMarking=true;g.add(plaque);
+    }
+    const optics=[];g.traverse(o=>{if(o.userData.weaponOptic)optics.push(o);});
+    for(const optic of optics){
+      const radius=pistol?.009:sniper?.015:.013;
+      for(let i=0;i<16;i++){
+        const a=i*Math.PI/8;
+        gpBox(optic,bright,.0014,.002,.002,radius*1.6,Math.cos(a)*radius*.57,Math.sin(a)*radius*.57,0,0,a);
+      }
+    }
+    if(!pistol&&g._parts?.main){
+      const part=g._parts.main,hy=sniper?.028:.046,hz=sniper?-.006:-.03;
+      gpCyl(part,steel,.003,.003,.018,20,.036,hy,hz,0,Math.PI/2);
+      gpCyl(part,black,.006,.006,.007,24,.048,hy,hz,0,Math.PI/2);
+      for(let i=0;i<12;i++){
+        const a=i*Math.PI/6;
+        gpBox(part,bright,.007,.0008,.0014,.048,hy+Math.cos(a)*.006,hz+Math.sin(a)*.006,0,0,a);
+      }
+    }
     let kick=0;
     const rest=()=>{kick=0;spring.scale.z=1;carriage.position.z=rz-L*.35;};
     g._tick=(dt,now,assembling)=>{

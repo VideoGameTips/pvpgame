@@ -3917,27 +3917,29 @@ function playBulletAir(ctx,start,volume,opts={}) {
     ceiling.oversample='2x';comp.connect(ceiling).connect(ctx.destination);ctx._bulletAirBus=comp;
   }
   const near=!!opts.near, speed=Math.max(30,opts.speed||150);
-  const dur=near?Math.max(.16,Math.min(.28,36/speed)):.19;
-  const peak=near?dur*.23:.024, source=ctx.createBufferSource();source.buffer=buffer;
-  const low=ctx.createBiquadFilter();low.type='lowpass';low.Q.value=.65;
-  low.frequency.setValueAtTime(8200,start);
-  low.frequency.exponentialRampToValueAtTime(near?1600:2400,start+dur);
-  const high=ctx.createBiquadFilter();high.type='highpass';high.frequency.value=near?650:900;
-  const body=ctx.createBiquadFilter();body.type='bandpass';body.Q.value=2.2;
-  body.frequency.setValueAtTime(near?5800:6500,start);
-  body.frequency.exponentialRampToValueAtTime(near?1100:1600,start+dur);
-  const bodyGain=ctx.createGain();bodyGain.gain.value=1.25;
+  const dur=near?Math.max(.18,Math.min(.28,36/speed)):.21;
+  const pass=dur*.36,source=ctx.createBufferSource();source.buffer=buffer;
+  // A broad pressure rush swells at closest approach. Resonant pitch sweeps
+  // sound like a plucked string, so there is no bandpass or playback-rate glide.
+  const low=ctx.createBiquadFilter();low.type='lowpass';low.Q.value=.5;
+  low.frequency.setValueAtTime(3800,start);
+  low.frequency.linearRampToValueAtTime(9000,start+pass);
+  low.frequency.linearRampToValueAtTime(3000,start+dur);
+  const high=ctx.createBiquadFilter();high.type='highpass';high.frequency.value=180;high.Q.value=.5;
   const gain=ctx.createGain(),pan=ctx.createStereoPanner();
-  const level=Math.max(.001,Math.min(1.4,volume))*(near?.66:.62)*BULLET_AUDIO_MIX.flight;
-  gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(level,start+peak);
-  gain.gain.exponentialRampToValueAtTime(level*.55,start+dur*.48);
-  gain.gain.exponentialRampToValueAtTime(.0001,start+dur);
+  const level=Math.max(.001,Math.min(1.4,volume))*(near?.9:.84)*BULLET_AUDIO_MIX.flight;
+  const envelope=new Float32Array(96);
+  for(let i=0;i<envelope.length;i++){
+    const t=i/(envelope.length-1),distance=(t-.36)/.14;
+    const edge=Math.min(1,t/.1,(1-t)/.22);
+    envelope[i]=level*edge*edge/Math.pow(1+distance*distance,.8);
+  }
+  gain.gain.setValueCurveAtTime(envelope,start,dur);
   pan.pan.setValueAtTime(opts.panStart??-.18,start);
   pan.pan.linearRampToValueAtTime(opts.panEnd??.28,start+dur);
-  source.playbackRate.setValueAtTime(1.65,start);source.playbackRate.exponentialRampToValueAtTime(.75,start+dur);
+  source.playbackRate.value=1;
   source.connect(high).connect(low).connect(gain).connect(pan).connect(ctx._bulletAirBus);
-  high.connect(body).connect(bodyGain).connect(gain);
-  source.onended=()=>{source.disconnect();high.disconnect();low.disconnect();body.disconnect();bodyGain.disconnect();gain.disconnect();pan.disconnect();};
+  source.onended=()=>{source.disconnect();high.disconnect();low.disconnect();gain.disconnect();pan.disconnect();};
   source.start(start,Math.random()*.08);source.stop(start+dur+.01);
 }
 

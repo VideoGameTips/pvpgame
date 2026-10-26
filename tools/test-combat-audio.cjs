@@ -40,7 +40,13 @@ function wav(channels,rate){
         const loud=await render(ctx=>{BULLET_AUDIO_MIX.muzzle=mix;playTone(ctx,.02,.12,gunBus(ctx,true),330,100,.02,'triangle');});
         const ratio=energy(loud.getChannelData(0),0,.4)/energy(old.getChannelData(0),0,.4);
         if(Math.abs(ratio-mix/.2)>.01)throw Error('Muzzle gain incorrect '+ratio);
-        const pass=await render(ctx=>playBulletAir(ctx,.02,1,{near:true,speed:150,panStart:-.9,panEnd:.9}));
+        const pass=await render(ctx=>{
+          const filters=[],create=ctx.createBiquadFilter.bind(ctx),source=ctx.createBufferSource.bind(ctx);
+          ctx.createBiquadFilter=()=>{const f=create();filters.push(f);return f;};
+          ctx.createBufferSource=()=>{const s=source();s.playbackRate.exponentialRampToValueAtTime=()=>{throw Error('Rubber-band pitch glide returned');};return s;};
+          playBulletAir(ctx,.02,1,{near:true,speed:150,panStart:-.9,panEnd:.9});
+          if(filters.some(f=>f.type==='bandpass'||f.Q.value>.71))throw Error('Resonant whistle returned');
+        });
         const l=pass.getChannelData(0),r=pass.getChannelData(1);
         if(energy(l,.03,.08)<=energy(r,.03,.08)||energy(r,.18,.24)<=energy(l,.18,.24))throw Error('Whizz does not sweep across listener');
         if(energy(l,.32,.5)>.0001)throw Error('Whizz tail hangs');

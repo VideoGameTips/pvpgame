@@ -74,8 +74,9 @@ metal, polymer, wood and dark recesses separate. `weapon-finish.js` mounts small
 receiver hardware on thirteen default guns, batched into three meshes per gun
 so it follows the original moving part without changing handling or stats.
 
-Combat audio puts the high, falling bullet whizz ahead of a bright, bass-cut
+Combat audio puts a broad, fast passing-air rush ahead of a bright, bass-cut
 muzzle bang, with directional near misses and a shared flight-volume ceiling.
+The air swells at closest approach without a resonant whistle or pitch glide.
 Confirmed hits use a dry slap/thump, with a sharper
 critical variant; noncombat UI cues and special skin voices are retained.
 `node tools/test-combat-audio.cjs` uses Playwright and offline Web Audio renders

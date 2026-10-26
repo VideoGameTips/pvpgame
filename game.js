@@ -13922,6 +13922,7 @@ function buildNeonTokyoLayout() {
 _BESPOKE.neon_tokyo=buildNeonTokyoLayout;
 
 function buildWarehouseLayout() {
+  if(window.buildAuthoredWarehouse)return window.buildAuthoredWarehouse();
   const name = 'warehouse', K = _bkBegin(name, 100, 120, 0x6d6a64);
   const wallC = 0x6f7d86, rackC = 0x8a5a2a, rackB = 0x3a5a8a, off = 0xb8b2a4, TOP = 4.6;
   K.wx(-50, 50, -59.6, 0.8, 0, 10, wallC); K.wx(-50, 50, 59.6, 0.8, 0, 10, wallC); K.wz(-60, 60, -49.6, 0.8, 0, 10, wallC); K.wz(-60, 60, 49.6, 0.8, 0, 10, wallC);
@@ -15928,7 +15929,7 @@ function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
     if (!MAP_GROUPS[name]) continue;
     try { if (_BESPOKE[name]) _BESPOKE[name](); } catch (e) { console.warn('[bespoke]', name, e); }
-    if (MAP_GROUPS[name].userData.authoredFoundry) continue;
+    if (MAP_GROUPS[name].userData.authoredFoundry || MAP_GROUPS[name].userData.authoredWarehouse) continue;
     if (MAP_THEMES[name].tower) {
       const b = MAP_BOUNDS[name], scale = (b.halfX + 1.5) / 50;
       MAP_SPAWNS[name] = {
@@ -17452,8 +17453,10 @@ GIM.urban = (X) => {
 // a minute ago is not the floor you are fighting over now.
 GIM_LABELS.crane = 'was flattened by a crate';
 GIM.warehouse = (X) => {
-  const b = X.arena(), Y = 9.4, rx = b.halfX - 1.4;
-  const spots = X.spots(10, { r: 2.4, sep: 11, edge: 7, h: 2.6 });
+  const authored=X.G.userData.authoredWarehouse;
+  const b = authored?{halfX:39.4,halfZ:34}:X.arena(), Y = 9.4, rx = b.halfX - 1.4;
+  const spots = authored?[-1,1].flatMap(s=>[-1,1].map(t=>({x:s*21.5,z:t*30}))).filter(p=>X.free(p.x,p.z,2.4))
+    : X.spots(10, { r: 2.4, sep: 11, edge: 7, h: 2.6 });
   if (spots.length < 3) return;
   X.dbg(spots);
   const steel = _gimLam(0xe2b422), dark = _gimLam(0x8d949c);
@@ -19088,6 +19091,7 @@ LOOK.urban = (X) => {                                         // an avenue with 
 };
 
 LOOK.warehouse = (X) => {                                     // a working floor: forklifts, pallets, painted aisles, a generator
+  if(X.G.userData.authoredWarehouse)return;
   for (const x of [-34, -22, 22, 34]) X.put(lkLine(60, 0.28, 0xe6b422, 0.85), x, 0, Math.PI / 2);
   for (const z of [-15.5, 15.5]) X.put(lkLine(78, 0.28, 0xe6b422, 0.85), 0, z, 0);
   X.scatter((i) => lkForklift(i % 2 ? 0xe6a31c : 0xd8601a), 3, { r: 1.7, sep: 22, solid: true });
@@ -20241,7 +20245,7 @@ function _upgradeMap(name) {
   if (!g || g._upgraded || !MAP_THEMES[name]) return;
   g._upgraded = true;
   const t0 = performance.now();
-  if (g.userData.authoredFoundry) {
+  if (g.userData.authoredFoundry || g.userData.authoredWarehouse) {
     // Preserve this map's authored routes and footprint instead of adding a generic outer ring.
     try { _gimMap(name); } catch (e) { console.warn('[upgrade] gimmick',name,e); }
     try { g._weathered=false; weatherMapGroup(g); } catch (e) {}
@@ -20258,6 +20262,7 @@ function _upgradeMap(name) {
   try { addMapRealism(name); } catch (e) { console.warn('[upgrade] realism', name, e); }
   try { addMapWear(name); } catch (e) { console.warn('[upgrade] wear', name, e); }
   try { window.PVE_MAP_CRAFT?.build(name); } catch(e) { console.warn('[upgrade] footprint',name,e); }
+  try { window.addRefineryPrecisionDetail?.(name); } catch(e) { console.warn('[upgrade] refinery detail',name,e); }
   // what was just added gets the same surface as the rest
   try { g._weathered = false; weatherMapGroup(g); } catch (e) {}
   g.userData.upgradeMs = Math.round(performance.now() - t0);
@@ -43262,6 +43267,9 @@ function drawScope() {
   ctx.fillStyle=vignette;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
 
   // Green reticle crosshair
+  if (_activeModelSkin[currentWeapon?.id]?.series === 'stealth' && window.PVE_STEALTH) {
+    PVE_STEALTH.drawScope(ctx,cx,cy,r);return;
+  }
   ctx.strokeStyle = 'rgba(0,255,80,0.9)';
   ctx.lineWidth = 1.5;
   const gap = Math.max(5,r*.025);
@@ -49004,6 +49012,7 @@ function _buildMech(model, id, evs) {
 // dryer or a rocket in a tuba is the joke ruined.
 function _skinHasMechanics(skin) {
   if (!skin) return true;                                   // the stock gun
+  if (skin.series === 'stealth') return true;
   if (skin.rarity === 'donut' || skin.rarity === 'legend' || skin.id === 'aug') return true;
   try { return GEN1_GATED_MODEL_SKIN_IDS.has(skin.id); } catch (e) { return false; }   // the realistic military set
 }
@@ -49514,6 +49523,9 @@ function buildSnackSkin(kind){
   g._greebled=true;g._handDetailed=true;return g;
 }
 const MODEL_SKINS = [
+  {id:'pistol_stealth_cipher',weapon:'pistol',name:'Stealth Cipher',series:'stealth',rarity:'rare',sw:['#202a2f','#aab8b9'],build:()=>PVE_STEALTH.build('pistol'),blurb:'Machined suppressor, exposed return spring and a red laser optic. Cosmetic spy hardware; unchanged damage.'},
+  {id:'ak20_stealth_ghostline',weapon:'ak20',name:'Stealth Ghostline',series:'stealth',rarity:'rare',sw:['#202a2f','#aab8b9'],build:()=>PVE_STEALTH.build('ak20'),blurb:'Blackened steel, polished pins, a working action and wall-stopped laser sight.'},
+  {id:'srx_stealth_longwatch',weapon:'srx',name:'Stealth Longwatch',series:'stealth',rarity:'rare',sw:['#202a2f','#ff334c'],build:()=>PVE_STEALTH.build('srx'),blurb:'A precision spy scope, red etched reticle and a mechanical suppressed marksman shell.'},
   {id:'shorty_pizza',weapon:'shorty',name:'Pizza Shorty',rarity:'good',sw:['#f1d372','#a32e25'],build:()=>buildSnackSkin('pizza'),blurb:'Pepperoni armor, a toasted crust and the original Shorty action. Pizza Party bundle.'},
   {id:'machine_pistol_soda',weapon:'machine_pistol',name:'Soda Pop',rarity:'good',sw:['#24a798','#d9e5df'],build:()=>buildSnackSkin('soda'),blurb:'An aluminum soda-can receiver with a pull tab. Soda Rush bundle.'},
   {id:'sg8_waffle',weapon:'sg8',name:'Waffle Iron',rarity:'good',sw:['#d99a48','#ffdf76'],build:()=>buildSnackSkin('waffle'),blurb:'Toasted waffle panels, syrup and a pat of butter. Breakfast Club bundle.'},
@@ -66777,6 +66789,7 @@ function loop() {
   });
   viewCamera = window.PVP_RAGDOLL?.viewCamera() || viewCamera;
   if (SOCIAL_VIEW.mode) viewCamera = SOCIAL_VIEW.camera;
+  safeLoopStep('stealth-laser',()=>window.PVE_STEALTH?.update(weaponModels[currentWeaponIdx],viewCamera===camera&&!SOCIAL_VIEW.mode&&!THEATER.active));
   if (!THEATER.active) {
     const hidden = viewCamera !== camera ? camera.children.filter(o => o.visible && !(o instanceof THREE.Light)) : [];
     hidden.forEach(o => { o.visible = false; });

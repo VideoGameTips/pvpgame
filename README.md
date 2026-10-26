@@ -65,6 +65,28 @@ With Playwright available, `node tools/test-foundry.cjs` checks routes, spawn
 safety, controller stair traversal and desktop/mobile renders; set
 `PLAYWRIGHT_MODULE` if Playwright is installed outside normal module lookup.
 
+`warehouse-map.js` replaces Warehouse with an open-air irregular logistics
+compound: secure records office, roof access, protected spawn aprons, storage
+racks, loading yards and supported crane rails. Its crane keeps dropping crates
+onto four authored clear spots. `refinery-detail.js` fits tank hatches, bolted
+flanges, valve wheels and numbered maintenance plates to final map geometry.
+
+## Stealth Series
+
+Select Stealth Cipher for the Handgun, Stealth Ghostline for AK-20, or Stealth
+Longwatch for SR-X in the weapon's model-skin panel. These are unlocked in the
+local PvE sandbox. `stealth-series.js` preserves ammunition, damage and reload
+timings while adding polished steel hardware, hollow suppressors, clamped
+optics, working magazines/charging actions and an exposed moving return spring.
+The red laser stops at map colliders and hides during inspection, reloads and
+alternate camera views. Longwatch has a red etched scope reticle. It grants no
+damage, targeting or through-wall vision changes.
+
+`node tools/test-stealth-craft.cjs` checks Warehouse route/spawn/stair safety,
+Refinery fittings, skin mechanics, laser obstruction, the scope reticle, and
+actual firing/rendering on desktop and mobile. `UPDATE_PREVIEW=1` refreshes the
+two map thumbnails.
+
 ## Weapon Finish
 
 Gun metal uses clean, fine brushed surfaces and cached weapon-only reflections;

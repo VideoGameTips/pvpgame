@@ -13,8 +13,8 @@
   <meta property="og:title" content="pvpgame | PvE Test Arena" />
   <meta property="og:description" content="Independent single-player campaign, survival and testing." />
   <meta property="og:url" content="https://videogametips.github.io/pvpgame/" />
-  <link rel="stylesheet" href="underworld.css" />
-  <link rel="stylesheet" href="backrooms.css" />
+  <link rel="stylesheet" href="underworld.css?v=49d8ec83e4ba" />
+  <link rel="stylesheet" href="backrooms.css?v=a4c69c507033" />
   <link rel="stylesheet" href="stealth-showroom.css?v=a6b8e6ce6c15" />
   <link rel="preload" href="audio/ballistic-shot.mp3" as="fetch" type="audio/mpeg" crossorigin="anonymous" />
   <style>
@@ -1585,13 +1585,14 @@
       document.getElementById('err').textContent='Failed to load three.min.js';
     }
   </script>
-  <script src="offline-runtime.js"></script>
+  <!-- Keep shared gameplay modules alongside the local detail/audio additions. -->
+  <script src="offline-runtime.js?v=46dfd29ae2af"></script>
   <script src="equipment-models.js?v=401f04777108"></script>
-  <script src="i18n.js"></script>
-  <script src="shop-catalog.js"></script>
-  <script src="underworld-data.js"></script>
-  <script src="underworld.js"></script>
-  <script src="map-craft.js"></script>
+  <script src="i18n.js?v=c8e387f9d668"></script>
+  <script src="shop-catalog.js?v=20e01191915c"></script>
+  <script src="underworld-data.js?v=2d3a2d48d063"></script>
+  <script src="underworld.js?v=738f1d47c362"></script>
+  <script src="map-craft.js?v=58e3451a6dff"></script>
   <script src="foundry-map.js?v=e7edb9b89efd"></script>
   <script src="warehouse-map.js?v=57d4e13d461e"></script>
   <script src="refinery-detail.js?v=b2dc038b0355"></script>
@@ -1599,10 +1600,10 @@
   <script src="stealth-series.js?v=63f3f99bd95c"></script>
   <script src="stealth-showroom.js?v=998a0c550c54"></script>
   <script src="game.js?v=b3d0a97d7c13"></script>
-  <script src="underworld-adapter.js"></script>
-  <script src="backrooms-data.js"></script>
-  <script src="backrooms.js"></script>
-  <script src="ragdoll.js"></script>
-  <script src="chat.js"></script>
+  <script src="underworld-adapter.js?v=160e74173c89"></script>
+  <script src="backrooms-data.js?v=f3bc852ddd8b"></script>
+  <script src="backrooms.js?v=1e90825c96ea"></script>
+  <script src="ragdoll.js?v=03157ba9aac1"></script>
+  <script src="chat.js?v=806e9829f496"></script>
 </body>
 </html>

@@ -1451,7 +1451,10 @@ const GAME_MODE_CONFIGS = {
   'ffa15': { type: 'ffa',  allies: 0, enemies: 15, timeLimit: 300 },
   // Special modes
   'frontlines': { type: 'frontlines', allies: 4, enemies: 5 },
-  'laststand':  { type: 'laststand',  allies: 0, enemies: 0 },
+  'boss':       { type: 'boss',       bossId: 'warden', allies: 0, enemies: 0, forcedMap: 'boss_arena', playerHp: 400 },   // 🤖 1v1 against THE WARDEN, a giant stationary robot
+  'boss_core':  { type: 'boss',       bossId: 'core',   allies: 0, enemies: 0, forcedMap: 'boss_arena', playerHp: 400 },   // 🔷 THE CORE: rings, shockwaves, beams
+  'boss_hydra': { type: 'boss',       bossId: 'hydra',  allies: 0, enemies: 0, forcedMap: 'boss_arena', playerHp: 400 },   // 🐍 THE HYDRA: acid, ice, lightning   // 🤖 1v1 against THE WARDEN, a giant stationary robot
+  'laststand':  { type: 'laststand',  allies: 3, enemies: 0, forcedMap: 'battlefield', playerHp: 300 },   // 🧟 zombie waves, three teammates, the Battlefield's farmhouse
   'dday':       { type: 'dday',       allies: 3, enemies: 0 },
   'base_raid':  { type: 'race',       allies: 4, enemies: 16, killGoal: 16, timeLimit: 420,
     forcedMap: 'base_raid', botHp: 220, playerHp: 300 },
@@ -15940,6 +15943,24 @@ function initMapThemes() {
     try { raiseThemedMapBoundaries(name); addThemedCombatStores(name); refineMapIdentity(name); protectThemedMapSpawns(name); themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); if (name === 'volcano') buildVolcanoScenery(); buildMapScenery(name); } catch (e) { console.warn('[theme]', name, e); }
   }
 }
+// ⭕ BOSS ARENA: a plain round pit, 62 m across the middle to the wall, with the Warden standing at the exact centre. Six pillars to hide behind,
+// six low blocks further out, rings painted on the floor. Like the Zombie Tower it is not in MAP_IDS: only the Boss Fight is ever dealt it.
+registerMap('boss_arena');
+MAP_THEMES.boss_arena = Object.assign(_T(0x2a2d34, 0x23262c, 0x3a3e46, 0x2b2f36, 0x3a2f2a, 0x54483a, 0xffb060, 0xffb060, 0x07080c, 'industrial', []), { keep: true, customDetail: true });
+function buildBossArenaLayout() {
+  const name = 'boss_arena', R = 62, K = _bkBegin(name, R * 2 + 16, R * 2 + 16, 0x2a2d34), G = MAP_GROUPS[name];
+  const flat = (geo, color, op, y) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: op < 1, opacity: op, depthWrite: false, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.position.y = y; G.add(m); return m; };
+  flat(new THREE.CircleGeometry(R, 72), 0x30343c, 1, 0.02);                                              // the round floor
+  for (const [r, col] of [[10, 0xff8a1a], [22, 0x4a5362], [34, 0x4a5362], [46, 0x4a5362], [58, 0xff8a1a]]) flat(new THREE.RingGeometry(r - 0.25, r + 0.25, 96), col, 0.9, 0.04);
+  for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, m = flat(new THREE.PlaneGeometry(0.4, 12), 0x4a5362, 0.8, 0.05); m.rotation.z = -a; m.position.set(Math.sin(a) * 28, 0.05, Math.cos(a) * 28); }   // spokes
+  const N = 56, seg = 2 * Math.PI * R / N + 0.8;                                                           // the wall: tangent boxes round a circle
+  for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2; K.box(Math.sin(a) * R, 0, Math.cos(a) * R, seg, 11, 2.4, i % 2 ? 0x2e323a : 0x353a43, a); }
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + 0.5236; K.box(Math.sin(a) * 27, 0, Math.cos(a) * 27, 3.4, 7, 3.4, 0x3d424c, a); }                    // pillars
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; K.box(Math.sin(a) * 44, 0, Math.cos(a) * 44, 7, 1.7, 1.6, 0x4a505b, a); }                         // low blocks
+  K.box(0, 0, 0, 7, 2.6, 7, 0x1c2027);                                                                     // under the boss: solid, so you cannot walk through it (low, so nothing it fires starts inside it)
+  G._skyColor = 0x07080c;
+}
+_BESPOKE.boss_arena = buildBossArenaLayout;
 initMapThemes();
 
 // Flat shading for every map, whatever built it. The generic arena pass that
@@ -16147,7 +16168,7 @@ const EGG_LINES = {
 };
 const EGG_CRANE = ['nice view', "don't look down", 'rope: 4 left', 'ahoy', 'tired of climbing', 'hi', 'shift ends at 5', 'hard hat: lost'];
 const EGG_SKIP = new Set(['blank', 'range', 'obby', 'm4_tower', 'm4_tower_big', 'm4_tower_super', 'big_harbor', 'storm_pier', 'pinball_arcade',
-  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid', 'neon_tokyo']);
+  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid', 'neon_tokyo', 'boss_arena']);
 const EGG_FLOATING = new Set(['space', 'orbital_station', 'gravity_lab', 'dreamscape', 'flying_moai', 'cyber', 'super_arena']);
 // Hand-drawn glyphs: a few wobbly strokes in a 256 square.
 function _eggGlyph(g, kind, rnd) {
@@ -19941,7 +19962,7 @@ const WEAR_UNTHEMED = { storm_pier: 'industrial', cargo_belts: 'industrial', las
 // Places that are not meant to look used: the neon and sci-fi maps (Cyber City, the station, the labs), the fairground
 // ones, an opera house and a shop. Rust, soot and grime on a hard-light city read as a different map; they get no wear.
 const WEAR_CLEAN_MOTIFS = new Set(['space', 'neon', 'carnival']);
-const WEAR_CLEAN_MAPS = new Set(['opera', 'supermarket']);
+const WEAR_CLEAN_MAPS = new Set(['opera', 'supermarket', 'boss_arena']);
 function wearIsClean(name) {
   const th = MAP_THEMES[name];
   return WEAR_CLEAN_MAPS.has(name) || WEAR_CLEAN_MOTIFS.has(th ? th.motif : WEAR_UNTHEMED[name]);
@@ -24556,32 +24577,51 @@ function buildSlushieMachine() {
 
 function buildNerfElite() {
   // 🧡 AK20 -> foam blaster. Orange shell, blue furniture, a clear dart drum and
-  // the safety-orange muzzle that makes it legal to own.
+  // the safety-orange muzzle that makes it legal to own. The drum is real: eight darts with orange tips in a clear barrel, and it indexes
+  // one dart round with every shot. Racing stripes and an ELITE label on both sides, flip-up sights, a light under the barrel.
   const g = new THREE.Group();
   const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
   const shell = new THREE.MeshPhongMaterial({ color: 0xf07a1c, shininess: 90, specular: 0xffd0a0 });
   const blue  = new THREE.MeshPhongMaterial({ color: 0x2f6fd8, shininess: 80, specular: 0xa8c8ff });
   const grey  = new THREE.MeshPhongMaterial({ color: 0x5a6068, shininess: 40, specular: 0x9aa4b0 });
   const clear = new THREE.MeshPhongMaterial({ color: 0xdfeaf2, shininess: 150, specular: 0xffffff,
-                                              transparent: true, opacity: 0.44 });
+                                              transparent: true, opacity: 0.38 });
   const foam  = new THREE.MeshPhongMaterial({ color: 0xf2e63a, shininess: 20, specular: 0x8a8a40 });
+  const white = new THREE.MeshPhongMaterial({ color: 0xf4f4ee, shininess: 40, specular: 0xffffff });
+  const tipM  = new THREE.MeshPhongMaterial({ color: 0xff5a14, shininess: 30, specular: 0xffc090 });
+  const lens  = new THREE.MeshBasicMaterial({ color: 0xbfe6ff });
   gpBox(g, shell, 0.050, 0.098, 0.300, 0, 0.006, -0.010);              // body
   gpBox(g, blue,  0.052, 0.020, 0.230, 0, 0.052, -0.010);              // top rail
   for (let i = 0; i < 7; i++) gpBox(g, inner, 0.054, 0.008, 0.010, 0, 0.062, -0.100 + i * 0.030);
   gpBox(g, grey, 0.054, 0.028, 0.060, 0, 0.030, 0.090);                // charging slide
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.056, 0.020, 0.004, 0, 0.030, 0.070 + i * 0.011);     // its ridges
   gpBox(g, blue, 0.062, 0.016, 0.026, 0, 0.044, 0.116);
-  // Clear drum of darts under the body.
+  for (const sd of [-1, 1]) {
+    gpBox(g, blue, 0.0016, 0.012, 0.220, sd * 0.0258, 0.026, -0.010);                               // racing stripe
+    gpBox(g, white, 0.0016, 0.007, 0.080, sd * 0.0258, -0.004, -0.050);                             // the ELITE label
+    for (let i = 0; i < 5; i++) gpBox(g, blue, 0.0018, 0.004, 0.010, sd * 0.0259, -0.004, -0.080 + i * 0.016);
+  }
+  // Clear drum of darts under the body, and it turns.
+  const drum = new THREE.Group(); drum.position.set(0, -0.066, -0.020); g.add(drum);
   gpCyl(g, clear, 0.054, 0.054, 0.046, 16, 0, -0.066, -0.020);
   gpCyl(g, blue,  0.058, 0.058, 0.008, 16, 0, -0.066, -0.046);
+  gpCyl(g, blue,  0.058, 0.058, 0.008, 16, 0, -0.066, 0.006);
   for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    gpCyl(g, foam, 0.0090, 0.0090, 0.034, 8, Math.cos(a) * 0.032, -0.066 + Math.sin(a) * 0.032, -0.020);
+    const a = (i / 8) * Math.PI * 2, cx = Math.cos(a) * 0.032, cy = Math.sin(a) * 0.032;
+    gpCyl(drum, foam, 0.0090, 0.0090, 0.034, 8, cx, cy, 0);                                         // a dart...
+    gpCyl(drum, tipM, 0.0092, 0.0050, 0.012, 8, cx, cy, -0.021);                                    // ...with its orange head
   }
   gpBox(g, shell, 0.034, 0.034, 0.060, 0, -0.030, -0.020);             // drum housing
   gpCyl(g, blue, 0.021, 0.021, 0.190, 12, 0, 0.010, -0.230);           // barrel
+  for (let i = 0; i < 3; i++) gpCyl(g, white, 0.0225, 0.0225, 0.006, 12, 0, 0.010, -0.170 - i * 0.050);   // barrel bands
   gpCyl(g, shell, 0.026, 0.026, 0.040, 12, 0, 0.010, -0.336);          // orange muzzle
   gpCyl(g, inner, 0.0135, 0.0135, 0.012, 12, 0, 0.010, -0.354);
   gpBox(g, grey, 0.030, 0.026, 0.110, 0, -0.026, -0.220);              // underrail
+  gpCyl(g, grey, 0.011, 0.011, 0.060, 10, 0, -0.030, -0.250);          // a light on it
+  gpCyl(g, lens, 0.0085, 0.0085, 0.004, 10, 0, -0.030, -0.282);
+  gpBox(g, white, 0.004, 0.022, 0.004, 0, 0.074, -0.150);              // front sight post
+  gpBox(g, blue, 0.016, 0.014, 0.008, 0, 0.070, 0.050);                // rear sight
+  gpBox(g, inner, 0.006, 0.006, 0.010, 0, 0.078, 0.050);
   gpPlate(g, blue, [                                                    // grip
     [0.082,-0.038],[0.114,-0.062],[0.120,-0.152],[0.096,-0.170],[0.070,-0.088],[0.064,-0.044],
   ], 0.040, 0);
@@ -24590,9 +24630,12 @@ function buildNerfElite() {
   gpPlate(g, shell, [                                                   // stock
     [0.156,-0.040],[0.216,0.010],[0.324,0.012],[0.388,-0.014],[0.382,-0.034],[0.222,-0.050],[0.168,-0.054],
   ], 0.048, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.050, 0.004, 0.034, 0, -0.004 - i * 0.008, 0.270, 0, 0, 0.1);   // stock vents
   gpBox(g, blue, 0.050, 0.054, 0.010, 0, -0.004, 0.400, 0.10);         // butt pad
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.362); g.add(flash);
   g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  let was = false;
+  g._tick = () => { const fired = !!(g._flash && g._flash.visible); if (fired && !was) drum.rotation.z += Math.PI / 4; was = fired; };   // one dart round per shot
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
@@ -25315,23 +25358,40 @@ function _skFinish(g, fz, fy, kick) {
 }
 
 function buildWalkieTalkie() {
-  // 📻 Cycler -> walkie-talkie. A slab body, stubby antenna out the front and
-  // the push-to-talk bar down the side.
+  // 📻 Cycler -> walkie-talkie. A slab body, a wound antenna, a lit screen, a keypad and the push-to-talk bar down the side. The status light
+  // blinks green, and goes red when it is transmitting (when you fire).
   const g = new THREE.Group();
   const shell = _skM(0x2a2e34, 60, 0x6a7078), grille = _skM(0x14161a, 20, 0x30343a);
   const orange = _skM(0xe8781c, 110, 0xffc890), rubber = _skM(0x1c1e22, 30, 0x444850);
   const led = new THREE.MeshBasicMaterial({ color: 0x3aff6a });
+  const lcd = new THREE.MeshBasicMaterial({ color: 0x9cffb0 }), lcdDark = new THREE.MeshBasicMaterial({ color: 0x0c2a14 });
   gpBox(g, shell, 0.046, 0.066, 0.150, 0, 0.012, -0.010);              // body
   gpBox(g, orange, 0.048, 0.008, 0.150, 0, 0.048, -0.010);             // top band
   for (let i = 0; i < 5; i++) gpBox(g, grille, 0.048, 0.003, 0.070, 0, 0.034 - i * 0.008, -0.035); // speaker slats
   gpCyl(g, rubber, 0.006, 0.004, 0.110, 8, 0, 0.040, -0.130);         // antenna
+  for (let i = 0; i < 8; i++) gpCyl(g, orange, 0.0072 - i * 0.0004, 0.0072 - i * 0.0004, 0.004, 8, 0, 0.040, -0.092 - i * 0.013);   // its windings
   gpCyl(g, orange, 0.010, 0.010, 0.014, 10, -0.012, 0.055, 0.030, 0);  // channel knob
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; gpBox(g, rubber, 0.002, 0.002, 0.003, -0.012 + Math.cos(a) * 0.0108, 0.0555 + 0, 0.030 + Math.sin(a) * 0.0108); }   // its grip ridges
   gpCyl(g, rubber, 0.008, 0.008, 0.012, 10, 0.012, 0.055, 0.030, 0);   // volume knob
   gpBox(g, rubber, 0.006, 0.036, 0.022, 0.026, 0.012, 0.012);          // push-to-talk
-  gpBox(g, led, 0.006, 0.004, 0.006, 0, 0.053, -0.050);                // status LED
   gpBox(g, shell, 0.020, 0.050, 0.004, 0, 0.012, 0.068);               // belt clip
+  // the face the player sees (the left): a screen, a keypad and a label
+  const lx = -0.0238;
+  gpBox(g, lcdDark, 0.002, 0.020, 0.046, lx, 0.030, -0.036);          // screen
+  gpBox(g, lcd, 0.0024, 0.004, 0.030, lx - 0.0003, 0.036, -0.038);    // its readout
+  gpBox(g, lcd, 0.0024, 0.004, 0.018, lx - 0.0003, 0.029, -0.044);
+  gpBox(g, lcd, 0.0024, 0.003, 0.034, lx - 0.0003, 0.023, -0.036);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) gpBox(g, c === 1 && r === 1 ? orange : rubber, 0.003, 0.0075, 0.0095, lx, 0.012 - r * 0.0105, -0.016 + c * 0.0115 - 0.012);   // the keypad
+  gpBox(g, orange, 0.002, 0.004, 0.036, lx, -0.016, -0.036);          // brand strip
+  const statusLed = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.004, 0.006), led); statusLed.position.set(0, 0.053, -0.050); g.add(statusLed);
   _skGrip(g, shell, -0.010);
-  return _skFinish(g, -0.198, 0.040, 0.008);
+  _skFinish(g, -0.198, 0.040, 0.008);
+  const base = led.color.getHex();
+  g._tick = (dt, now) => {
+    const tx = !!(g._flash && g._flash.visible);
+    led.color.setHex(tx ? 0xff3030 : (Math.sin(now * 3) > 0.2 ? base : 0x1a6a30));
+  };
+  return g;
 }
 
 function buildFencingFoil() {
@@ -25342,7 +25402,7 @@ function buildFencingFoil() {
   const steel = _skM(0xd8dee6, 200, 0xffffff), bell = _skM(0xc8ccd2, 180, 0xffffff);
   const grip = _skM(0x1c1c1e, 30, 0x444444), brass = _skM(0xd8b040, 180, 0xfff0a0);
   const red = _skM(0xd8302a, 100, 0xffa098);
-  gpCyl(g, steel, 0.0045, 0.0018, 0.300, 8, 0, 0.012, -0.100);         // blade
+  const blade = gpCyl(g, steel, 0.0045, 0.0018, 0.300, 8, 0, 0.012, -0.100);         // blade
   gpCyl(g, red, 0.0035, 0.0035, 0.008, 8, 0, 0.012, -0.254);           // button tip
   gpCyl(g, bell, 0.010, 0.030, 0.034, 16, 0, 0.012, 0.062);            // bell guard
   gpCyl(g, bell, 0.031, 0.031, 0.004, 16, 0, 0.012, 0.046);            // guard rim
@@ -25350,7 +25410,22 @@ function buildFencingFoil() {
   gpCyl(g, brass, 0.013, 0.013, 0.020, 10, 0, 0.012, 0.180);           // pommel
   gpCyl(g, _skM(0x2a2c30, 20), 0.0025, 0.0025, 0.080, 6, 0, -0.020, 0.200, 1.0); // body wire
   _skGrip(g, grip, -0.004);
-  return _skFinish(g, -0.262, 0.012, 0.010);
+  const dark = _skM(0x2a2c30, 20), led = new THREE.MeshBasicMaterial({ color: 0x3aff6a });
+  gpCyl(g, dark, 0.026, 0.026, 0.003, 16, 0, 0.012, 0.0475);           // the pad inside the bell
+  gpBox(g, dark, 0.010, 0.006, 0.020, 0, 0.024, 0.090);                 // thumb pad
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; gpCyl(g, dark, 0.0034, 0.0034, 0.004, 8, Math.cos(a) * 0.020, 0.012 + Math.sin(a) * 0.020, 0.063); }   // the bell's holes
+  for (let i = 0; i < 3; i++) gpCyl(g, grip, 0.0100 - i * 0.0004, 0.0100 - i * 0.0004, 0.004, 10, 0, 0.012, 0.100 + i * 0.022);   // grip bands
+  const light = new THREE.Mesh(new THREE.SphereGeometry(0.0065, 8, 6), led); light.position.set(0, 0.034, 0.100); g.add(light);     // the scoring light
+  for (let i = 0; i < 4; i++) { const c = new THREE.Mesh(new THREE.TorusGeometry(0.006, 0.0014, 5, 10), dark); c.position.set(0.004 * i, -0.022 - i * 0.004, 0.206 + i * 0.016); c.rotation.x = 0.6; g.add(c); }   // the wire's coil
+  _skFinish(g, -0.262, 0.012, 0.010);
+  let amp = 0, was = false;
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) amp = 1; was = fired;
+    amp = Math.max(0, amp - dt * 2.2);
+    blade.rotation.x = Math.PI / 2 + Math.sin(now / 38) * 0.05 * amp; blade.rotation.z = Math.sin(now / 47) * 0.04 * amp;   // the blade whips after a thrust
+    light.material.color.setHex(amp > 0.05 ? 0xff3030 : 0x3aff6a);
+  };
+  return g;
 }
 
 function buildCordReel() {
@@ -25370,7 +25445,21 @@ function buildCordReel() {
   gpBox(g, dark, 0.052, 0.008, 0.008, 0, 0.084, -0.050);
   gpCyl(g, cord, 0.004, 0.004, 0.090, 6, 0, -0.040, 0.070, 1.2);       // trailing cord
   _skGrip(g, dark, -0.030);
-  return _skFinish(g, -0.142, 0, 0.014);
+  const hubSpin = new THREE.Group(); hubSpin.position.set(0, 0, -0.0425); g.add(hubSpin);          // the front of the drum: six spokes, turning
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; gpBox(hubSpin, dark, 0.006, 0.040, 0.003, Math.sin(a) * 0.027, Math.cos(a) * 0.027, 0, 0, 0, -a); }
+  gpCyl(hubSpin, yellow, 0.010, 0.010, 0.004, 10, 0, 0, 0.001);
+  const breaker = _skM(0xd8302a, 100, 0xffa098); gpBox(g, breaker, 0.012, 0.010, 0.010, 0.016, 0.026, -0.098);   // the reset button
+  const lamp = new THREE.MeshBasicMaterial({ color: 0x3aff6a }); gpBox(g, lamp, 0.006, 0.004, 0.006, -0.014, 0.026, -0.098);
+  gpBox(g, yellow, 0.002, 0.014, 0.030, 0.0285, 0.0, -0.098);          // warning label
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; gpBox(g, dark, 0.003, 0.003, 0.003, Math.sin(a) * 0.052, Math.cos(a) * 0.052, -0.042); }   // flange bolts
+  gpCyl(g, dark, 0.006, 0.006, 0.014, 8, 0, -0.046, 0.140, 1.2); gpBox(g, dark, 0.020, 0.012, 0.016, 0, -0.050, 0.150);   // and the plug on the cord's end
+  _skFinish(g, -0.142, 0, 0.014);
+  let spin = 0.6;
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible); spin += ((fired ? 18 : 0.6) - spin) * Math.min(1, dt * 7);
+    hubSpin.rotation.z += dt * spin; lamp.color.setHex(fired ? 0xffcc20 : 0x3aff6a);
+  };
+  return g;
 }
 
 function buildMailingTube() {
@@ -25388,6 +25477,15 @@ function buildMailingTube() {
   for (let i = 0; i < 6; i++) gpBox(g, ink, 0.0035, 0.022, i % 2 ? 0.003 : 0.005, -0.038, 0.010, -0.058 + i * 0.011); // barcode
   gpBox(g, cap, 0.003, 0.008, 0.070, -0.0365, 0.040, -0.030);          // FRAGILE stripe
   _skGrip(g, tape, -0.020);
+  const red2 = cap;
+  for (const [z, w] of [[-0.130, 0.014], [-0.010, 0.010]]) gpCyl(g, tape, 0.0368, 0.0368, w, 16, 0, 0.014, z);   // more tape
+  for (let i = 0; i < 3; i++) { const st = gpBox(g, [red2, ink, label][i % 3], 0.0035, 0.012, 0.012, -0.0372, 0.036, -0.100 + i * 0.014); }   // postage stamps
+  gpCyl(g, ink, 0.009, 0.009, 0.0035, 12, -0.0372, 0.028, -0.062, 0, Math.PI / 2);                 // a postmark
+  gpCyl(g, label, 0.0072, 0.0072, 0.0038, 12, -0.0374, 0.028, -0.062, 0, Math.PI / 2);
+  gpBox(g, ink, 0.0036, 0.004, 0.030, -0.0376, 0.004, -0.004);                                    // THIS END UP, and the arrow
+  gpBox(g, ink, 0.0036, 0.012, 0.004, -0.0376, 0.012, 0.014);
+  for (let i = 0; i < 2; i++) gpBox(g, ink, 0.0036, 0.003, 0.010, -0.0376, 0.017 - i * 0.001, 0.010 + i * 0.008, 0, 0, i ? -0.8 : 0.8);
+  gpBox(g, kraft, 0.040, 0.004, 0.030, 0, 0.050, 0.150);                                          // a dent where it was dropped
   return _skFinish(g, -0.252, 0.014, 0.018);
 }
 
@@ -25402,14 +25500,25 @@ function buildKaleidoscope() {
   [-0.150, -0.060, 0.030].forEach(z => gpCyl(g, dark, 0.0275, 0.0275, 0.008, 14, 0, 0.014, z)); // bands
   gpCyl(g, brass, 0.032, 0.034, 0.030, 14, 0, 0.014, -0.190);         // object cell
   gpCyl(g, _skGlass(0x88ddff), 0.030, 0.030, 0.022, 14, 0, 0.014, -0.200); // glass
-  for (let i = 0; i < 6; i++) {                                         // the loose glass
+  const cell = new THREE.Group(); cell.position.set(0, 0.014, -0.2135); g.add(cell);                  // the loose glass, in a cell that turns
+  for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
-    gpBox(g, gems[i], 0.008, 0.008, 0.004, Math.cos(a) * 0.017, 0.014 + Math.sin(a) * 0.017, -0.2135, 0, 0, a * 2);
+    gpBox(cell, gems[i], 0.008, 0.008, 0.004, Math.cos(a) * 0.017, Math.sin(a) * 0.017, 0, 0, 0, a * 2);
   }
+  for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + 0.4; gpBox(cell, gems[(i + 2) % 6], 0.005, 0.005, 0.003, Math.cos(a) * 0.008, Math.sin(a) * 0.008, 0.001, 0, 0, a * 3); }
   gpCyl(g, dark, 0.022, 0.016, 0.040, 12, 0, 0.014, 0.095);           // eyepiece
   gpCyl(g, dark, 0.026, 0.026, 0.010, 12, 0, 0.014, 0.120);           // eye cup
   _skGrip(g, brass, 0);
-  return _skFinish(g, -0.222, 0.014, 0.010);
+  for (let i = 0; i < 12; i++) gpBox(g, dark, 0.050, 0.003, 0.004, 0, 0.014, 0.060 + i * 0.0, 0, 0, i * 0.26).position.z = 0.060 + (i % 2) * 0.012;   // a knurled collar
+  for (const z of [-0.105, -0.015]) gpCyl(g, brass, 0.0262, 0.0262, 0.003, 14, 0, 0.014, z);       // fine rings between the bands
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff9aff, transparent: true, opacity: 0.0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  glow.position.set(0, 0.014, -0.225); g.add(glow);
+  _skFinish(g, -0.222, 0.014, 0.010);
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible); cell.rotation.z += dt * (fired ? 9 : 0.7);
+    glow.material.opacity += ((fired ? 0.5 : 0.0) - glow.material.opacity) * Math.min(1, dt * 12); glow.material.color.setHSL((now / 2000) % 1, 0.8, 0.65);
+  };
+  return g;
 }
 
 function buildBoombox() {
@@ -25419,9 +25528,10 @@ function buildBoombox() {
   const body = _skM(0x2a2c30, 50, 0x5a5e66), silver = _skM(0xc0c6ce, 160, 0xffffff);
   const red = _skM(0xd8302a, 100, 0xffa098), cone = _skM(0x121416, 20, 0x30343a);
   gpBox(g, body, 0.064, 0.058, 0.190, 0, 0.010, -0.030);               // body
+  const cones = [];
   [-0.070, 0.005].forEach(z => {
     gpCyl(g, silver, 0.021, 0.021, 0.004, 16, -0.033, 0.010, z, 0, Math.PI / 2); // woofer ring
-    gpCyl(g, cone, 0.015, 0.015, 0.006, 16, -0.034, 0.010, z, 0, Math.PI / 2);   // cone
+    cones.push(gpCyl(g, cone, 0.015, 0.015, 0.006, 16, -0.034, 0.010, z, 0, Math.PI / 2));   // cone
     gpCyl(g, silver, 0.005, 0.005, 0.008, 8, -0.035, 0.010, z, 0, Math.PI / 2);  // dust cap
   });
   gpBox(g, cone, 0.032, 0.004, 0.070, 0, 0.040, -0.010);               // cassette door
@@ -25432,43 +25542,99 @@ function buildBoombox() {
   gpBox(g, silver, 0.006, 0.006, 0.130, 0, 0.067, -0.030);
   gpBox(g, red, 0.060, 0.008, 0.004, 0, 0.030, -0.126);                // front stripe
   _skGrip(g, body, -0.010);
-  return _skFinish(g, -0.140, 0.010, 0.020);
+  const barM = [0x3ad86a, 0xe8c828, 0xd8302a].map(c => new THREE.MeshBasicMaterial({ color: c }));
+  const bars = [];                                                                                 // an equaliser across the front, dancing
+  for (let i = 0; i < 7; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.020, 0.0024), barM[0]); b.position.set(-0.018 + i * 0.006, 0.018, -0.1262); g.add(b); bars.push(b); }
+  gpBox(g, cone, 0.044, 0.026, 0.002, 0, 0.018, -0.1255);                                         // its window
+  gpBox(g, silver, 0.030, 0.004, 0.006, 0.0, -0.012, -0.1262);                                    // the tuning dial
+  gpBox(g, red, 0.002, 0.008, 0.007, 0.006, -0.012, -0.1266);
+  gpCyl(g, silver, 0.0025, 0.0025, 0.080, 6, 0.026, 0.060, 0.050, 0, -0.5);                       // a telescopic aerial
+  for (let i = 0; i < 3; i++) gpCyl(g, silver, 0.0035 - i * 0.0006, 0.0035 - i * 0.0006, 0.020, 6, 0.030 + i * 0.006, 0.050 + i * 0.020, 0.050, 0, -0.5);
+  for (const z of [-0.012, 0.012]) gpCyl(g, silver, 0.007, 0.007, 0.003, 10, 0, 0.0405, z + 0.0, Math.PI / 2, 0).position.set(z, 0.0405, -0.010);    // the cassette's two reels, in the door
+  _skFinish(g, -0.140, 0.010, 0.020);
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible), t = now / 1000;
+    bars.forEach((b, i) => { const h = 0.3 + 0.7 * Math.abs(Math.sin(t * (5 + i * 1.3) + i)) * (fired ? 1 : 0.55); b.scale.y = h; b.position.y = 0.008 + h * 0.010; b.material = h > 0.8 ? barM[2] : h > 0.55 ? barM[1] : barM[0]; });
+    cones.forEach(c => c.scale.set(1, 1 + (fired ? 0.5 : 0.1) * Math.sin(t * 24), 1));                // the woofers pump
+  };
+  return g;
 }
 
 function buildToaster() {
-  // 🍞 Twin Barrel AR -> toaster. Two slots, two slices of toast, a lever
-  // and a browning dial. Twin barrel, as promised.
+  // 🍞 Twin Barrel AR -> toaster. Two slots with glowing elements, two slices of crusted toast that POP UP when you fire, a lever, a browning dial
+  // with its marks, a logo band and a plug on the cord. Twin barrel, as promised.
   const g = new THREE.Group();
   const chrome = _skM(0xd8dce2, 200, 0xffffff), black = _skM(0x1c1e22, 60, 0x5a6068);
-  const toast = _skM(0xe0b070, 20, 0xf0d0a0);
+  const toast = _skM(0xe8bf80, 20, 0xf0d0a0), crust = _skM(0xb8782e, 20, 0xd8a868);
+  const hot = new THREE.MeshBasicMaterial({ color: 0xff6a1a }), red = _skM(0xc82a24, 100, 0xffa098);
   gpBox(g, chrome, 0.064, 0.062, 0.180, 0, 0.012, -0.030);             // body
+  gpBox(g, black, 0.066, 0.006, 0.182, 0, 0.0445, -0.030);             // top plate
+  const slices = [];
   [-0.018, 0.018].forEach(x => {
-    gpBox(g, black, 0.014, 0.003, 0.140, x, 0.0435, -0.030);           // slot
-    gpBox(g, toast, 0.011, 0.026, 0.110, x, 0.056, -0.030);            // slice
+    gpBox(g, black, 0.014, 0.003, 0.140, x, 0.0475, -0.030);           // slot
+    gpBox(g, hot, 0.0016, 0.0016, 0.120, x - 0.0058, 0.0472, -0.030);  // the element glowing down one side of it
+    const sl = new THREE.Group(); sl.position.set(x, 0.045, -0.030); g.add(sl);
+    gpBox(sl, crust, 0.011, 0.026, 0.112, 0, 0.008, 0);                // the slice: a crust...
+    gpBox(sl, toast, 0.0118, 0.021, 0.100, 0, 0.0095, 0);              // ...and the crumb inside it
+    slices.push(sl);
   });
   gpBox(g, black, 0.014, 0.006, 0.020, -0.036, 0.030, -0.010);         // lever
+  gpBox(g, black, 0.004, 0.036, 0.008, -0.034, 0.018, -0.010);         // its slot
   gpBox(g, chrome, 0.066, 0.004, 0.182, 0, -0.019, -0.030);            // base rim
+  for (const sd of [-1, 1]) { gpBox(g, black, 0.0016, 0.004, 0.150, sd * 0.0322, 0.026, -0.030); gpBox(g, red, 0.0016, 0.010, 0.040, sd * 0.0322, 0.008, -0.030); }   // a logo band down both sides
   gpCyl(g, black, 0.010, 0.010, 0.006, 10, 0, 0.012, -0.123);         // browning dial
+  for (let i = 0; i < 5; i++) { const a = -0.8 + i * 0.4; gpBox(g, black, 0.002, 0.005, 0.0018, Math.sin(a) * 0.0118, 0.012 + Math.cos(a) * 0.0118, -0.1262); }   // its marks
+  gpBox(g, red, 0.002, 0.007, 0.002, 0, 0.012, -0.1258);              // its pointer
   gpCyl(g, black, 0.004, 0.004, 0.100, 6, 0, -0.010, 0.080, 1.3);      // cord
+  gpBox(g, black, 0.014, 0.010, 0.020, 0, -0.011, 0.126);              // plug
+  gpBox(g, chrome, 0.003, 0.004, 0.008, -0.004, -0.011, 0.139); gpBox(g, chrome, 0.003, 0.004, 0.008, 0.004, -0.011, 0.139);
   _skGrip(g, chrome, -0.010);
-  return _skFinish(g, -0.136, 0.012, 0.012);
+  _skFinish(g, -0.136, 0.012, 0.012);
+  let pop = 0, was = false;
+  g._tick = (dt) => {
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) pop = 1; was = fired;
+    pop = Math.max(0, pop - dt * 5);
+    for (let i = 0; i < slices.length; i++) slices[i].position.y = 0.045 + Math.sin(pop * Math.PI) * 0.030 * (i ? 0.85 : 1);   // the slices jump and drop back
+  };
+  return g;
 }
 
 function buildVacuumCleaner() {
-  // 🧹 Storm Cannon -> handheld vacuum. Red body, a see-through dust cup with
-  // last week in it and a crevice tool where the muzzle goes.
+  // 🧹 Storm Cannon -> handheld vacuum. Red body with a ribbed motor housing, a see-through dust cup with last week swirling in it (it spins
+  // up to a roar when you fire), a pleated filter, a crevice tool where the muzzle goes, battery lights and a wrist strap.
   const g = new THREE.Group();
   const red = _skM(0xd8302a, 100, 0xffa098), grey = _skM(0x8a9096, 60, 0xd0d4d8);
   const black = _skM(0x1c1e22, 40, 0x444850), dust = _skM(0x8a7a5a, 10, 0x9a8a6a);
+  const led = new THREE.MeshBasicMaterial({ color: 0x3aff6a }), ledOff = new THREE.MeshBasicMaterial({ color: 0x1a3a22 }), white = _skM(0xf0f0ea, 40);
   gpCyl(g, red, 0.040, 0.040, 0.170, 14, 0, 0.014, -0.010);           // motor body
+  for (let i = 0; i < 4; i++) gpCyl(g, black, 0.0415, 0.0415, 0.004, 14, 0, 0.014, 0.036 - i * 0.022);     // its ribs
   gpCyl(g, _skGlass(0xcfe8f4), 0.038, 0.038, 0.070, 14, 0, 0.014, -0.125); // dust cup
-  gpCyl(g, dust, 0.030, 0.030, 0.050, 10, 0, 0.014, -0.125);          // what's in it
+  const swirl = new THREE.Group(); swirl.position.set(0, 0.014, -0.125); g.add(swirl);
+  for (let i = 0; i < 9; i++) {                                         // what's in it, going round
+    const a = i / 9 * Math.PI * 2, r = 0.010 + (i % 3) * 0.008, bit = new THREE.Mesh(new THREE.SphereGeometry(0.0042 + (i % 2) * 0.0016, 6, 5), dust);
+    bit.position.set(Math.cos(a) * r, Math.sin(a) * r, -0.020 + (i % 5) * 0.010); swirl.add(bit);
+  }
+  gpCyl(g, dust, 0.014, 0.020, 0.026, 10, 0, 0.014, -0.140);          // a clump at the bottom
   gpCyl(g, grey, 0.042, 0.042, 0.010, 14, 0, 0.014, -0.092);          // filter ring
+  for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; gpBox(g, white, 0.002, 0.012, 0.006, Math.cos(a) * 0.034, 0.014 + Math.sin(a) * 0.034, -0.082, 0, 0, a + Math.PI / 2); }   // pleats
   gpCyl(g, black, 0.018, 0.010, 0.070, 10, 0, 0.014, -0.195);         // crevice tool
+  gpCyl(g, grey, 0.020, 0.020, 0.008, 10, 0, 0.014, -0.164);          // its collar
   gpBox(g, black, 0.010, 0.006, 0.024, 0, 0.056, 0.010);               // power switch
+  const bars = [0, 1, 2].map(i => { const b = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.003, 0.008), led); b.position.set(-0.0412, 0.030 + i * 0.0, 0.006 + i * 0.012); b.rotation.set(0, 0, 0); g.add(b); return b; });   // battery lights
   for (let i = 0; i < 4; i++) gpBox(g, black, 0.030, 0.003, 0.004, 0, 0.000 + i * 0.008, 0.078); // exhaust vents
+  gpBox(g, white, 0.002, 0.012, 0.050, -0.0402, 0.020, -0.030);       // brand sticker
+  gpBox(g, black, 0.0024, 0.004, 0.036, -0.0404, 0.020, -0.030);
   _skGrip(g, red, 0);
-  return _skFinish(g, -0.234, 0.014, 0.014);
+  gpBox(g, black, 0.040, 0.004, 0.010, 0, -0.074, 0.032);              // a wrist strap
+  _skFinish(g, -0.234, 0.014, 0.014);
+  let spin = 4;
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible);
+    spin += ((fired ? 26 : 4) - spin) * Math.min(1, dt * 6);                                   // it roars up when you fire, and winds down
+    swirl.rotation.z += dt * spin;
+    bars.forEach((b, i) => { b.material = (i === 2 && fired) ? ledOff : led; });
+  };
+  return g;
 }
 
 function buildHolePunch() {
@@ -25479,15 +25645,24 @@ function buildHolePunch() {
   const black = _skM(0x1c1e22, 40, 0x444850);
   const bits = [0xff4a6a, 0xffd23a, 0x4aa8ff, 0x6aff8a, 0xffffff].map(c => _skM(c, 30));
   gpBox(g, black, 0.050, 0.014, 0.170, 0, 0.000, -0.010);              // base plate
-  gpBox(g, blue, 0.046, 0.016, 0.150, 0, 0.018, -0.010, -0.03);        // lever arm
-  gpBox(g, blue, 0.046, 0.020, 0.060, 0, 0.024, 0.060, -0.10);         // lever handle
+  const lever = new THREE.Group(); lever.position.set(0, 0.014, 0.060); g.add(lever);
+  gpBox(lever, blue, 0.046, 0.016, 0.150, 0, 0.004, -0.070, -0.03);        // lever arm (it pivots at the back)
+  gpBox(lever, blue, 0.046, 0.020, 0.060, 0, 0.010, 0.000, -0.10);         // lever handle
   [-0.012, 0.012].forEach(x => gpCyl(g, steel, 0.006, 0.006, 0.020, 8, x, 0.014, -0.070, 0)); // punch pins
   gpBox(g, steel, 0.052, 0.010, 0.006, 0, 0.002, -0.100);              // paper guide
   gpBox(g, _skGlass(0xdfeaf2), 0.040, 0.020, 0.070, 0, -0.016, 0.040); // confetti reservoir
   for (let i = 0; i < 8; i++)
     gpBox(g, bits[i % 5], 0.006, 0.003, 0.006, ((i % 3) - 1) * 0.011, -0.021 + (i % 2) * 0.008, 0.022 + i * 0.008, 0, i, 0);
   _skGrip(g, blue, -0.010);
-  return _skFinish(g, -0.112, 0.008, 0.010);
+  gpCyl(g, steel, 0.004, 0.004, 0.050, 8, 0, 0.014, 0.060, 0, Math.PI / 2);   // the hinge pin
+  for (let i = 0; i < 3; i++) gpCyl(g, steel, 0.0065, 0.0065, 0.003, 8, 0.0, 0.020 + i * 0.0, 0.020 + i * 0.012);   // the spring
+  for (let i = 0; i < 9; i++) gpBox(g, black, 0.0016, i % 3 === 0 ? 0.004 : 0.0028, 0.004, 0.0236, 0.0035, -0.080 + i * 0.016);   // the ruler marks on the guide
+  for (const x of [-0.020, 0.020]) gpCyl(g, black, 0.007, 0.007, 0.006, 8, x, -0.008, -0.080, 0);   // rubber feet
+  gpBox(g, bits[0], 0.024, 0.008, 0.002, 0, -0.016, 0.0775);          // the label on the chad drawer
+  _skFinish(g, -0.112, 0.008, 0.010);
+  let press = 0, was = false;
+  g._tick = (dt) => { const fired = !!(g._flash && g._flash.visible); if (fired && !was) press = 1; was = fired; press = Math.max(0, press - dt * 6); lever.rotation.x = Math.sin(press * Math.PI * 0.5) * 0.35; };   // the lever comes down with every shot
+  return g;
 }
 
 function buildBeeSmoker() {
@@ -25505,7 +25680,23 @@ function buildBeeSmoker() {
   gpBox(g, wood, 0.050, 0.006, 0.070, 0, -0.030, 0.092, 0.15);         // bellows bottom board
   gpBox(g, leather, 0.046, 0.026, 0.055, 0, -0.012, 0.088);            // folded leather
   _skGrip(g, leather, -0.020);
-  return _skFinish(g, -0.182, 0.014, 0.010);
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; gpBox(g, dark, 0.004, 0.004, 0.004, Math.cos(a) * 0.0315, 0.014 + Math.sin(a) * 0.0315, 0.022); }   // rivets round the can
+  gpBox(g, tin, 0.060, 0.004, 0.012, 0, 0.050, -0.040);                // a hinged lid
+  gpCyl(g, dark, 0.003, 0.003, 0.040, 6, 0, 0.060, -0.064, 0.9);       // its latch wire
+  for (let i = 0; i < 3; i++) gpBox(g, leather, 0.048, 0.004, 0.050, 0, -0.026 + i * 0.012, 0.090);   // the bellows' folds
+  const puffM = new THREE.MeshBasicMaterial({ color: 0xdcdcdc, transparent: true, opacity: 0.5, depthWrite: false });
+  const puffs = []; for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.010, 8, 6), puffM.clone()); g.add(m); puffs.push(m); }
+  const bee = new THREE.Group(); g.add(bee);                            // and one bee, who has made up their mind
+  const bb = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), new THREE.MeshBasicMaterial({ color: 0xf2c418 })); bb.scale.set(1, 0.8, 1.4); bee.add(bb);
+  const bs = new THREE.Mesh(new THREE.BoxGeometry(0.0125, 0.0035, 0.003), new THREE.MeshBasicMaterial({ color: 0x1c1c1c })); bs.position.z = 0.001; bee.add(bs);
+  const bw = new THREE.Mesh(new THREE.PlaneGeometry(0.008, 0.005), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide })); bw.position.y = 0.006; bee.add(bw);
+  _skFinish(g, -0.182, 0.014, 0.010);
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible), t = now / 1000;
+    puffs.forEach((m, i) => { const k = ((t * (fired ? 1.4 : 0.5) + i / 4) % 1); m.position.set(Math.sin(t * 2 + i) * 0.006, 0.020 + k * 0.060, -0.172 - k * 0.030); m.scale.setScalar(0.6 + k * 1.6); m.material.opacity = 0.5 * (1 - k); });
+    bee.position.set(Math.cos(t * 2.4) * 0.034, 0.040 + Math.sin(t * 3.1) * 0.010, -0.140 + Math.sin(t * 2.4) * 0.030); bee.rotation.y = -t * 2.4; bw.scale.y = 0.6 + 0.4 * Math.sin(t * 60);
+  };
+  return g;
 }
 
 function buildHandMixer() {
@@ -30772,17 +30963,29 @@ function buildBubbleBlaster() {
   const dark = GUN_MATS.inner(), glow = new THREE.MeshBasicMaterial({ color: 0x9ffcff });
   gpBox(g, blue, 0.050, 0.052, 0.170, 0, 0.014, 0.010);
   gpCyl(g, clear, 0.036, 0.036, 0.110, 18, 0, 0.050, -0.020, Math.PI / 2);
-  for (let i = 0; i < 6; i++) {
-    const b = new THREE.Mesh(new THREE.SphereGeometry(0.006 + i * 0.001, 8, 6), clear);
-    b.position.set((Math.random() - 0.5) * 0.040, 0.050 + (Math.random() - 0.5) * 0.034, -0.060 + i * 0.018); g.add(b);
+  const bubs = [];
+  for (let i = 0; i < 9; i++) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.005 + (i % 4) * 0.0012, 8, 6), clear);
+    b.position.set((Math.random() - 0.5) * 0.040, 0.050 + (Math.random() - 0.5) * 0.034, -0.060 + i * 0.014); g.add(b); bubs.push({ m: b, ph: Math.random() * 6.3, z: b.position.z, x: b.position.x });
   }
+  const soap = new THREE.Mesh(new THREE.CylinderGeometry(0.0335, 0.0335, 0.090, 18, 1, true), new THREE.MeshBasicMaterial({ color: 0x9ae8ff, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
+  soap.rotation.x = Math.PI / 2; soap.position.set(0, 0.050, -0.020); g.add(soap);                     // the solution, with a level
   gpCyl(g, pink, 0.018, 0.026, 0.105, 16, 0, 0.016, -0.122);
   gpCyl(g, glow, 0.008, 0.008, 0.012, 12, 0, 0.016, -0.182);
   gpBox(g, dark, 0.032, 0.076, 0.030, 0, -0.062, 0.050, 0.24);
   gpBox(g, pink, 0.038, 0.010, 0.034, 0, -0.106, 0.058, 0.24);
+  const wandRing = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0028, 6, 18), pink); wandRing.position.set(0, 0.016, -0.186); g.add(wandRing);     // the wand ring at the muzzle
+  const film = new THREE.Mesh(new THREE.CircleGeometry(0.0185, 18), new THREE.MeshBasicMaterial({ color: 0xcaf4ff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })); film.position.set(0, 0.016, -0.186); g.add(film);
+  const dial = new THREE.Mesh(new THREE.CircleGeometry(0.011, 14), new THREE.MeshBasicMaterial({ color: 0xf8f8f0 })); dial.position.set(-0.0258, 0.020, 0.040); dial.rotation.y = -Math.PI / 2; g.add(dial);   // a pressure gauge on the side
+  const needle = new THREE.Mesh(new THREE.BoxGeometry(0.0016, 0.0095, 0.001), new THREE.MeshBasicMaterial({ color: 0xd83030 })); needle.position.set(-0.0262, 0.020, 0.040); needle.rotation.y = -Math.PI / 2; g.add(needle);
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 7), clear);
   flash.visible = false; flash.position.set(0, 0.016, -0.188); g.add(flash);
   g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible), t = now / 1000;
+    bubs.forEach(b => { b.m.position.y = 0.050 + Math.sin(t * 1.7 + b.ph) * 0.014; b.m.position.x = b.x + Math.cos(t * 1.3 + b.ph) * 0.006; });      // they bob about in the tank
+    film.scale.setScalar(1 + (fired ? 0.15 : 0.03 * Math.sin(t * 5))); needle.rotation.z = (fired ? -1.1 : -0.4 + 0.08 * Math.sin(t * 3));
+  };
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
@@ -30800,6 +31003,14 @@ function buildRPGWaterBalloonLauncher() {
   gpCyl(g, hose, 0.009, 0.009, 0.180, 10, -0.030, -0.010, 0.010, Math.PI / 2, 0.35);
   gpBox(g, hose, 0.020, 0.020, 0.020, -0.044, -0.050, 0.082);
   gpPlate(g, dark, [[0.076,-0.020],[0.108,-0.034],[0.112,-0.100],[0.080,-0.116],[0.058,-0.056],[0.056,-0.026]], 0.040, 0);
+  const bal2 = new THREE.Mesh(new THREE.SphereGeometry(0.030, 12, 9), new THREE.MeshPhongMaterial({ color: 0xff7ab8, shininess: 130, specular: 0xffffff })); bal2.scale.set(1.1, 0.86, 1); bal2.position.set(0, 0.048, 0.060); g.add(bal2);   // a second one waiting
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(0.0485, 0.0485, 0.060, 18, 1, true), new THREE.MeshBasicMaterial({ color: 0x4ac0ff, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide }));
+  water.rotation.x = Math.PI / 2; water.position.set(0, 0.040, 0.030); g.add(water);                       // water in the hopper
+  const dial = new THREE.Mesh(new THREE.CircleGeometry(0.014, 16), new THREE.MeshBasicMaterial({ color: 0xf8f8f0 })); dial.position.set(-0.0362, 0.014, 0.060); dial.rotation.y = -Math.PI / 2; g.add(dial);
+  const needle = new THREE.Mesh(new THREE.BoxGeometry(0.0018, 0.012, 0.001), new THREE.MeshBasicMaterial({ color: 0xd83030 })); needle.position.set(-0.0366, 0.014, 0.060); needle.rotation.y = -Math.PI / 2; g.add(needle);   // the pressure gauge
+  gpCyl(g, hose, 0.006, 0.006, 0.090, 8, 0.030, 0.010, 0.020, Math.PI / 2, 0); gpBox(g, hose, 0.016, 0.016, 0.016, 0.030, 0.010, 0.072);   // a pump handle on the other side
+  for (let i = 0; i < 3; i++) gpCyl(g, hose, 0.0365, 0.0365, 0.006, 18, 0, 0.010, -0.150 - i * 0.030);   // hose clamps along the tube
+  g._tick = (dt, now) => { const t = now / 1000, fired = !!(g._flash && g._flash.visible); bal.scale.set(1.15 + 0.04 * Math.sin(t * 6), 0.86 - 0.03 * Math.sin(t * 6), 1.0); bal2.scale.set(1.1 + 0.03 * Math.sin(t * 5 + 1), 0.86, 1); needle.rotation.z = fired ? -1.2 : -0.5 + 0.1 * Math.sin(t * 2); };
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.030, 8, 7), balloon);
   flash.visible = false; flash.position.set(0, 0.010, -0.258); g.add(flash);
   g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
@@ -42864,7 +43075,14 @@ function loadoutReady() {
     selectedMeleeIdx >= 0 && selectedSupportIdx >= 0;
 }
 
+// Where you come back after a fall in a hold-the-line mode, and how long it takes: D-Day's bunker, or Last Stand's farmhouse.
+function holdRespawn() {
+  if (match?.type === 'laststand') return { x: LS_PLAYER[0], z: LS_PLAYER[1], fx: 0, fz: -30, ms: LS_RESPAWN_MS };
+  return { x: DDAY_BUNKER_XS[0], z: DDAY_BUNKER_Z, fx: DDAY_BUNKER_XS[0], fz: 0, ms: 3000 };
+}
+function holdMode() { return match?.type === 'dday' || match?.type === 'laststand'; }
 function resetCombatResources() {
+  fistStrike = null;
   window.PVP_RAGDOLL?.resetLocal();
   hellfireCores=3;
   pendingEnvironmentDamage.length = 0;
@@ -45969,14 +46187,16 @@ function _applyRootToTarget(pid, ms, color = 0x9fe8ff) {
 
 function _nearestAbilityRayHit(origin, dir, range, radius = 0.65) {
   let best = null;
-  const r2Body = radius * radius, r2Head = 0.32 * 0.32;
   for (const [pid, mesh] of Object.entries(remoteMeshes)) {
     if (!mesh.visible || players[pid]?.dead) continue;
     if (friendlyFireBlocked(pid, myId)) continue;
-    if (!hasLineOfSight(origin.x, origin.z, mesh.position.x, mesh.position.z)) continue;
+    const sc = mesh._bodyScale || 1;                                          // (a giant's spheres are as big as it is)
+    const hm = mesh._hitMul || 1;
+    const r2Body = (radius * sc * hm) * (radius * sc * hm), r2Head = (0.32 * sc * hm) * (0.32 * sc * hm);
+    if (sc === 1 && !hasLineOfSight(origin.x, origin.z, mesh.position.x, mesh.position.z)) continue;
     const pts = [
-      { p: new THREE.Vector3(mesh.position.x, mesh.position.y + 1.55, mesh.position.z), r2: r2Head, head: true },
-      { p: new THREE.Vector3(mesh.position.x, mesh.position.y + 0.95, mesh.position.z), r2: r2Body, head: false },
+      { p: new THREE.Vector3(mesh.position.x, mesh.position.y + 1.55 * sc, mesh.position.z), r2: r2Head, head: true },
+      { p: new THREE.Vector3(mesh.position.x, mesh.position.y + 0.95 * sc, mesh.position.z), r2: r2Body, head: false },
     ];
     for (const s of pts) {
       const rel = s.p.clone().sub(origin);
@@ -47333,10 +47553,10 @@ function tryMelee() {
     const toTarget = mesh.position.clone().sub(camera.position);
     toTarget.y = 0;
     const dist = toTarget.length();
-    if (dist > item.range || dist < 0.05) continue;
+    if (dist > item.range + ((mesh._bodyScale || 1) - 1) * 0.7 * (mesh._hitMul || 1) || dist < 0.05) continue;
     const dir = toTarget.normalize();
     if (forward.dot(dir) < 0.55) continue;
-    hitPos = mesh.position.clone(); hitPos.y += 1.0;
+    hitPos = mesh.position.clone(); hitPos.y += 1.0 * (mesh._bodyScale || 1);
     if (soundId !== 'chainsaw' || sawDry) {
       playSoundEvent('melee_impact', { material: MELEE_SWING_SOUND[soundId], volume: 0.95, minGap: 60 });
     }
@@ -49400,6 +49620,17 @@ function buildChampagnePopper() {
   gpBox(g, poly, 0.080, 0.070, 0.090, 0, -0.050, 0.100);
   gpBox(g, poly, 0.040, 0.050, 0.140, 0, -0.060, 0.220, 0.10);
   gpBox(g, steel, 0.090, 0.012, 0.070, 0, -0.012, 0.070);
+  const wire = new THREE.MeshPhongMaterial({ color: 0xc8ccd2, shininess: 180, specular: 0xffffff });
+  for (let i = 0; i < 3; i++) gpCyl(g, wire, 0.026 + i * 0.0006, 0.026 + i * 0.0006, 0.003, 12, 0, 0.010, -0.204 - i * 0.012);     // the muselet's wire cage
+  for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI; gpBox(g, wire, 0.0025, 0.0025, 0.036, Math.cos(a) * 0.017, 0.010 + Math.sin(a) * 0.017, -0.222); }
+  gpCyl(g, foilMat, 0.0535, 0.0535, 0.020, 16, 0, 0.010, -0.100);                                          // the foil collar on the neck
+  const lab = new THREE.MeshPhongMaterial({ color: 0xf2e8c8, shininess: 20 });
+  gpCyl(g, lab, 0.0525, 0.0525, 0.090, 16, 0, 0.010, 0.050);                                                // the label
+  gpCyl(g, foilMat, 0.0530, 0.0530, 0.006, 16, 0, 0.010, 0.098); gpCyl(g, foilMat, 0.0530, 0.0530, 0.006, 16, 0, 0.010, 0.002);
+  for (let i = 0; i < 3; i++) gpBox(g, new THREE.MeshPhongMaterial({ color: 0x2a2a2a }), 0.020, 0.004 + (i === 1 ? 0.002 : 0), 0.002, 0, 0.010 + 0.0, 0.0 + 0.0).position.set(0, 0.0625, 0.030 + i * 0.012);   // lettering on it
+  const fizz = new THREE.MeshBasicMaterial({ color: 0xfff4c8, transparent: true, opacity: 0.6, depthWrite: false });
+  const bub = []; for (let i = 0; i < 8; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.0034, 6, 5), fizz); g.add(m); bub.push(m); }
+  g._tick = (dt, now) => { const t = now / 1000, fired = !!(g._flash && g._flash.visible); bub.forEach((m, i) => { const k = (t * (fired ? 1.6 : 0.5) + i / 8) % 1; m.position.set(Math.cos(i * 2.4) * 0.040, 0.010 + Math.sin(i * 2.4) * 0.040 * 0.9, 0.140 - k * 0.340); }); };   // bubbles rising through the glass
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.040, 8, 7), new THREE.MeshBasicMaterial({ color: 0xffeeaa }));
   flash.visible = false; flash.position.set(0, 0.010, -0.270); g.add(flash);
   g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
@@ -50360,6 +50591,14 @@ function buildPlunger() {
   // Socket where the wood goes into the rubber.
   const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.030, 10), darkMat);
   socket.rotation.x = Math.PI / 2; socket.position.set(0, 0, -0.072); g.add(socket);
+  const inside = new THREE.Mesh(new THREE.ConeGeometry(0.056, 0.090, 14, 1, true), new THREE.MeshLambertMaterial({ color: 0x4a0e0a, side: THREE.DoubleSide }));
+  inside.rotation.x = Math.PI / 2; inside.position.set(0, 0, -0.114); g.add(inside);                      // the dark inside of the cup
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0172, 0.0172, 0.030, 10), new THREE.MeshLambertMaterial({ color: 0xf0e0c0 })); band.rotation.x = Math.PI / 2; band.position.set(0, 0, 0.060); g.add(band);   // a brand band round the handle
+  for (const z of [0.052, 0.068]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.0176, 0.0176, 0.004, 10), new THREE.MeshLambertMaterial({ color: 0xa8261a })); r.rotation.x = Math.PI / 2; r.position.set(0, 0, z); g.add(r); }
+  const hole = new THREE.Mesh(new THREE.TorusGeometry(0.008, 0.002, 5, 10), new THREE.MeshLambertMaterial({ color: 0x6a1710 })); hole.position.set(0, 0, 0.268); g.add(hole);   // the hanging hole
+  const dm = new THREE.MeshBasicMaterial({ color: 0x8ac8ff, transparent: true, opacity: 0.8 });
+  const drips = [0, 1, 2].map(i => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 6, 5), dm); g.add(m); return m; });
+  g._tick = (dt, now) => { const t = now / 1000; drips.forEach((m, i) => { const k = (t * 0.9 + i / 3) % 1; m.position.set(Math.cos(i * 2.1) * 0.058, -0.012 - k * k * 0.080, -0.158 + Math.sin(i * 2.1) * 0.0); m.scale.set(1, 1 + k, 1); m.material.opacity = 0.8 * (1 - k * 0.6); }); };   // it drips
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
@@ -50510,6 +50749,12 @@ function buildCandyCane() {
       Math.floor(i / 2) % 2 ? redMat : whiteMat);
     bead.position.set(x, y, z); g.add(bead);
   });
+  const ribbon = new THREE.MeshLambertMaterial({ color: 0x1f8a3a });
+  for (const sx of [-1, 1]) { const loop = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), ribbon); loop.scale.set(1.0, 0.55, 0.7); loop.position.set(sx * 0.020, 0.024, 0.150); loop.rotation.z = sx * 0.5; g.add(loop); }
+  const knotB = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 8, 6), ribbon); knotB.position.set(0, 0.024, 0.150); g.add(knotB);
+  for (const sx of [-1, 1]) { const tail = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.002, 0.040), ribbon); tail.position.set(sx * 0.010, 0.012, 0.172); tail.rotation.set(0.2, sx * 0.3, 0); g.add(tail); }   // the bow, with its tails
+  const sparks = []; for (let i = 0; i < 10; i++) { const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.004, 0), new THREE.MeshBasicMaterial({ color: 0xfff6c8 })); const bead = g.children[i * 3 + 1] || g.children[0]; m.position.copy(bead.position).add(new THREE.Vector3((i % 3 - 1) * 0.010, 0.010 + (i % 2) * 0.008, 0)); g.add(m); sparks.push(m); }   // sugar crystals
+  g._tick = (dt, now) => { const t = now / 1000; sparks.forEach((m, i) => { const k = 0.5 + 0.5 * Math.sin(t * 5 + i * 1.9); m.scale.setScalar(0.3 + k * 1.1); m.rotation.y += dt * 3; }); };
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
@@ -50534,6 +50779,17 @@ function buildPoolNoodle() {
     const band = new THREE.Mesh(new THREE.TorusGeometry(0.0345, 0.005, 5, 14), stripeMat);
     band.position.set(0, 0, z); g.add(band);
   });
+  const dm = new THREE.MeshBasicMaterial({ color: 0x9adfff, transparent: true, opacity: 0.8 });
+  for (let i = 0; i < 12; i++) {                                                   // the ribbing of the foam, a ring of little ridges along the shaft
+    const rd = new THREE.Mesh(new THREE.TorusGeometry(0.0345, 0.0016, 4, 14), foamMat); rd.position.set(0, 0, 0.190 - i * 0.032); g.add(rd);
+  }
+  const bite = new THREE.Mesh(new THREE.SphereGeometry(0.010, 8, 6), holeMat); bite.position.set(0.026, 0.020, -0.050); g.add(bite);   // a chunk someone bit out of it
+  const drips = [0, 1, 2].map(() => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 6, 5), dm); g.add(m); return m; });
+  g._tick = (dt, now) => {
+    const t = now / 1000;
+    tip.rotation.x = Math.PI / 2 + 0.17 + Math.sin(t * 2.2) * 0.05; tip.position.y = -0.008 + Math.sin(t * 2.2) * 0.004;       // the floppy end never quite stops
+    drips.forEach((m, i) => { const k = (t * 0.8 + i / 3) % 1; m.position.set(Math.cos(i * 2.1) * 0.032, -0.030 - k * k * 0.090, -0.300 + i * 0.022); m.material.opacity = 0.8 * (1 - k * 0.7); });
+  };
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
@@ -51617,7 +51873,84 @@ function buildBalloonSword() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+// 🔱 Spear → Trident. Three points where there was one: a gold head with a teal gem, curling side prongs with barbs, and a few
+// drops of water that never quite fall.
+function buildTrident() {
+  const g = new THREE.Group();
+  const gold = new THREE.MeshPhongMaterial({ color: 0xd4a935, shininess: 130, specular: 0xfff0b0 });
+  const teal = new THREE.MeshPhongMaterial({ color: 0x1f9fae, shininess: 110, specular: 0xbffcff });
+  const gem  = new THREE.MeshBasicMaterial({ color: 0x7af0ff });
+  const drop = new THREE.MeshBasicMaterial({ color: 0xaaf4ff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
+  const along = (geo, mat, z, x = 0, y = 0, tipForward = false) => { const m = new THREE.Mesh(geo, mat); m.rotation.x = tipForward ? -Math.PI / 2 : Math.PI / 2; m.position.set(x, y, z); g.add(m); return m; };
+  along(new THREE.CylinderGeometry(0.0085, 0.0085, 0.52, 10), teal, 0.040);                         // the shaft
+  for (let i = 0; i < 4; i++) along(new THREE.CylinderGeometry(0.0105, 0.0105, 0.010, 10), gold, 0.18 + i * 0.045);   // gold bands
+  along(new THREE.ConeGeometry(0.012, 0.030, 10), gold, 0.325, 0, 0, false);                       // the butt cap
+  along(new THREE.CylinderGeometry(0.014, 0.011, 0.020, 10), gold, -0.215);                         // collar under the head
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.012, 0.014), gold); bar.position.set(0, 0, -0.232); g.add(bar);   // the crossbar
+  along(new THREE.ConeGeometry(0.0095, 0.070, 8), gold, -0.282, 0, 0, true);                       // centre prong
+  for (const sd of [-1, 1]) {
+    along(new THREE.CylinderGeometry(0.0055, 0.0055, 0.050, 8), gold, -0.258, sd * 0.040);          // side prongs
+    along(new THREE.ConeGeometry(0.0075, 0.034, 8), gold, -0.302, sd * 0.040, 0, true);
+    const barb = new THREE.Mesh(new THREE.ConeGeometry(0.0045, 0.020, 6), gold);                   // a barb on each, turned back
+    barb.rotation.set(Math.PI / 2 + 0.2, 0, -sd * 0.7); barb.position.set(sd * 0.030, 0, -0.288); g.add(barb);
+  }
+  const jewel = new THREE.Mesh(new THREE.OctahedronGeometry(0.0095, 0), gem); jewel.position.set(0, 0, -0.222); jewel.scale.set(1, 1, 1.3); g.add(jewel);
+  [[-0.030, 0.030, -0.205, 0.0050], [0.034, -0.026, -0.190, 0.0040], [0.012, 0.040, -0.175, 0.0045]].forEach(([x, y, z, r]) => {
+    const d = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), drop); d.position.set(x, y, z); g.add(d);
+  });
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// ⚡ Adrenaline Pack → Energy Drink. A tall neon can, a lightning bolt on the front, a fizz of bubbles over the open tab.
+function buildEnergyDrink() {
+  const g = new THREE.Group();
+  const alu  = new THREE.MeshPhongMaterial({ color: 0x15171c, shininess: 150, specular: 0xffffff });
+  const neon = new THREE.MeshPhongMaterial({ color: 0x7dff1c, shininess: 90, specular: 0xe8ffc0 });
+  const silver = new THREE.MeshPhongMaterial({ color: 0xcfd5dc, shininess: 180, specular: 0xffffff });
+  const bolt = new THREE.MeshBasicMaterial({ color: 0xfff23a });
+  const fizz = new THREE.MeshBasicMaterial({ color: 0xe9ffd0, transparent: true, opacity: 0.6, depthWrite: false });
+  const can = new THREE.Mesh(new THREE.CylinderGeometry(0.027, 0.027, 0.115, 18), alu); g.add(can);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0278, 0.0278, 0.034, 18), neon); band.position.y = -0.004; g.add(band);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.0235, 0.027, 0.012, 18), silver); top.position.y = 0.0635; g.add(top);
+  const bot = new THREE.Mesh(new THREE.CylinderGeometry(0.0255, 0.0235, 0.008, 18), silver); bot.position.y = -0.0615; g.add(bot);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.0235, 0.0016, 6, 18), silver); rim.rotation.x = Math.PI / 2; rim.position.y = 0.0705; g.add(rim);
+  const tab = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.0016, 0.020), silver); tab.position.set(0, 0.0705, 0.004); tab.rotation.x = -0.35; g.add(tab);
+  for (const [bx, by, bz, rz] of [[0.004, 0.006, -0.0278, 0.5], [-0.004, -0.008, -0.0278, 0.5]]) {          // a bolt on the front: two slanted bars
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.026, 0.002), bolt); b.position.set(bx, by, bz); b.rotation.z = rz; g.add(b);
+  }
+  [[0.004, 0.092, 0.002, 0.0055], [-0.008, 0.108, -0.004, 0.0045], [0.010, 0.122, 0.003, 0.0038], [-0.002, 0.134, -0.002, 0.0032]].forEach(([x, y, z, r]) => {
+    const f = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), fizz); f.position.set(x, y, z); g.add(f);
+  });
+  g.rotation.set(0.28, 0.35, -0.12);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🎁 Satchel Charge → Gift Bag. Tissue paper at the top, rope handles, a bow. It is, sadly, not a present.
+function buildGiftBag() {
+  const g = new THREE.Group();
+  const paper = new THREE.MeshLambertMaterial({ color: 0xc8283a });
+  const stripe = new THREE.MeshLambertMaterial({ color: 0xf2e6c8 });
+  const gold = new THREE.MeshPhongMaterial({ color: 0xe0b434, shininess: 120, specular: 0xfff0b0 });
+  const tissue = [0xffffff, 0xffd0e0, 0xc8f0e0].map(c => new THREE.MeshLambertMaterial({ color: c, side: THREE.DoubleSide }));
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.112, 0.130, 0.056), paper); g.add(body);
+  for (const sz of [-1, 1]) for (let i = 0; i < 3; i++) {                                                    // paper dots on both faces
+    const d = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.0075, 0.002, 10), stripe);
+    d.rotation.x = Math.PI / 2; d.position.set(-0.030 + i * 0.030, -0.025 + (i % 2) * 0.040, sz * 0.0282); g.add(d);
+  }
+  const band = new THREE.Mesh(new THREE.BoxGeometry(0.114, 0.014, 0.058), gold); band.position.y = 0.040; g.add(band);     // the ribbon round the top
+  tissue.forEach((m, i) => { const t = new THREE.Mesh(new THREE.PlaneGeometry(0.070, 0.060), m); t.position.set((i - 1) * 0.024, 0.092, (i - 1) * 0.006); t.rotation.set(0.2 * (i - 1), 0.4 * (i - 1), 0.25 * (i - 1)); g.add(t); });
+  for (const sz of [-1, 1]) { const h = new THREE.Mesh(new THREE.TorusGeometry(0.030, 0.0028, 6, 16, Math.PI), gold); h.position.set(0, 0.066, sz * 0.020); h.rotation.set(0, 0, 0); g.add(h); }
+  const bowL = new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), gold); bowL.scale.set(1.5, 1, 0.7); bowL.position.set(-0.014, 0.040, 0.034); bowL.rotation.z = 0.5; g.add(bowL);
+  const bowR = bowL.clone(); bowR.position.x = 0.014; bowR.rotation.z = -0.5; g.add(bowR);
+  const knot = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), gold); knot.position.set(0, 0.040, 0.036); g.add(knot);
+  g.rotation.set(0.12, 0.35, 0);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 const MELEE_MODEL_SKINS = [
+  { id: 'spear_trident', melee: 'spear', name: 'Trident', rarity: 'good',
+    sw: ['#d4a935', '#1f9fae'], build: buildTrident,
+    blurb: 'Three points where there was one. Slightly damp.' },
   { id: 'knife_floss', melee: 'knife', name: 'Dental Floss', rarity: 'good',
     sw: ['#f2f4f6', '#3ab2c8'], build: buildDentalFloss,
     blurb: 'I hate dentists... the cutter is the sharp part.' },
@@ -51956,6 +52289,11 @@ function buildEightBall() {
   g.add(patch);
   const halo = new THREE.Mesh(new THREE.SphereGeometry(0.066, 14, 10), new THREE.MeshBasicMaterial({ color: 0xb98cff, transparent: true, opacity: 0.22, depthWrite: false }));
   g.add(halo);
+  const win = new THREE.Mesh(new THREE.CircleGeometry(0.0105, 6), new THREE.MeshBasicMaterial({ color: 0x1a2a8a })); win.position.set(0, -0.012, 0.0494); g.add(win);
+  const tri = new THREE.Mesh(new THREE.CircleGeometry(0.0074, 3), new THREE.MeshBasicMaterial({ color: 0xaab8ff })); tri.position.set(0, -0.0125, 0.0497); tri.rotation.z = Math.PI / 2; g.add(tri);   // the die floating in its window
+  const orbit = new THREE.Group(); g.add(orbit);
+  for (let i = 0; i < 5; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.0032, 6, 5), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xd8b8ff : 0x8affff })); const a = i / 5 * Math.PI * 2; m.position.set(Math.cos(a) * 0.060, Math.sin(a) * 0.020, Math.sin(a) * 0.060); orbit.add(m); }
+  g._tick = (dt, now) => { const t = now / 1000; orbit.rotation.y += dt * 1.4; orbit.rotation.z = 0.5; halo.material.opacity = 0.18 + 0.1 * Math.sin(t * 3); tri.rotation.z = Math.PI / 2 + Math.sin(t * 2) * 0.35; };
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 function buildWhoopeeCushion() {
@@ -51970,6 +52308,10 @@ function buildWhoopeeCushion() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 const SUPPORT_MODEL_SKINS = [
+  { id: 'adrenaline_energy_drink', support: 'adrenaline', name: 'Energy Drink', rarity: 'good', sw: ['#15171c', '#7dff1c'], build: buildEnergyDrink,
+    blurb: 'Neon, fizzing, and the can says not to have three.' },
+  { id: 'satchel_gift_bag', support: 'satchel', name: 'Gift Bag', rarity: 'good', sw: ['#c8283a', '#e0b434'], build: buildGiftBag,
+    blurb: 'Tissue paper, a bow, a handle. Do not open it; press the button.' },
   { id: 'frag_pineapple',  support: 'frag',        name: 'Pineapple',        rarity: 'good', sw: ['#e3b522', '#3f8f2c'], build: buildPineappleGrenade,
     blurb: 'Army slang, taken literally. The pin is real.' },
   { id: 'frag_disco',      support: 'frag',        name: 'Disco Ball',       rarity: 'good', sw: ['#dfe7f0', '#ff4fd8'], build: buildDiscoBall,
@@ -55644,6 +55986,7 @@ function gimmickOnHit(weaponId, pid, hitPos, dmg, opts) {
   }
 }
 function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = {}) {
+  if (match && match.boss && pid === match.boss.bot.id) bossOnHit(hitWorldPos, weaponId);   // 🛡️ a deflecting boss sends some of it back
   // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt. The hit still
   // shows (grey), and the first one says why nothing happened: a gun that seems to do nothing reads
   // as broken (#35).
@@ -55665,8 +56008,10 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   const falloff = falloffMultiplier(weaponId, hitDist);
   // 🔥 Plasma Carbine: the bolt grows as it travels, up to +80% at 45 m (it gives up what the other guns lose over distance)
   const plasmaGrow = WEAPONS.find(w => w.id === weaponId)?.plasmaGrows && hitDist != null ? 1 + 0.8 * Math.min(1, hitDist / 45) : 1;
-  const dmg = Number.isFinite(opts.damageOverride) ? Math.max(0, Math.min(999, Math.round(opts.damageOverride))) : (headshot && instakill) ? 999 : Math.round(
+  const dmg0 = Number.isFinite(opts.damageOverride) ? Math.max(0, Math.min(999, Math.round(opts.damageOverride))) : (headshot && instakill) ? 999 : Math.round(
     (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff * plasmaGrow * (opts.wallPenetrated && gatecrasherPiercesWalls(weaponId) ? .5 : 1));
+  const _bossT = !!(match && match.boss && pid === match.boss.bot.id);
+  const dmg = _bossT ? bossScaleDamage(dmg0) : dmg0;      // 🤖 (in the online game the server does this; here nothing does)
   // With other real players in the match, a bot this hit kills on our screen is dead on
   // everyone's (#48): the server takes `fatal` as the kill. (Guests know a bot's HP from
   // the server's playerHit; the host from its own simulation.)
@@ -55745,7 +56090,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   if (isBot) {
     const bot = resolveBot(pid);
     if (bot && !bot.dead) {
-      const effective = weaponId==='omega_pistol' ? bot.hp : instakill ? 9999 : dmg;
+      const effective = _bossT ? dmg : (weaponId==='omega_pistol' ? bot.hp : instakill ? 9999 : dmg);
       bot.hp = Math.max(0, bot.hp - effective);
       if (players[pid]) players[pid].hp = bot.hp;
       // Flee-trigger metrics: track recent damage + consecutive hits
@@ -55788,6 +56133,7 @@ function clientRespawnBot(botId) {
   if (!bot || !bot.dead) return;
   if (bot.campaignActor) return;
   if (bot.zombie) { zombieRemove(bot); return; }   // the wave director makes new ones
+  if (bot.boss) return;                            // a boss that falls stays down
   // Only respawn in modes where bots should respawn (not elim - that handles rounds separately)
   if (match?.type === 'elim') return;
   const teamBots = gameBots.filter(b => b.team === bot.team);
@@ -56358,9 +56704,11 @@ function updateBullets(dt) {
         // The fallbacks are the old standing numbers, for a mesh that has not
         // been animated yet.
         const _rg = mesh._rig;
-        const headOff = (_rg && _rg.hitHeadOff !== undefined) ? _rg.hitHeadOff : 1.65;
-        const bodyOff = (_rg && _rg.hitBodyOff !== undefined) ? _rg.hitBodyOff : 1.0;
-        const headZ = _rg?.hitHeadZ || 0, bodyZ = _rg?.hitBodyZ || 0;
+        const bsc = mesh._bodyScale || 1, hm = mesh._hitMul || 1;      // a boss's spheres are as big as it is (and a little more: it is wide)
+        const headR = 0.28 * bsc * hm + bulletR, bodyR = 0.65 * bsc * hm + bulletR;
+        const headOff = ((_rg && _rg.hitHeadOff !== undefined) ? _rg.hitHeadOff : 1.65) * bsc;
+        const bodyOff = ((_rg && _rg.hitBodyOff !== undefined) ? _rg.hitBodyOff : 1.0) * bsc;
+        const headZ = (_rg?.hitHeadZ || 0) * bsc, bodyZ = (_rg?.hitBodyZ || 0) * bsc;
         const hx = mesh.position.x+Math.sin(mesh.rotation.y)*headZ, hz = mesh.position.z+Math.cos(mesh.rotation.y)*headZ;
         const bx = mesh.position.x+Math.sin(mesh.rotation.y)*bodyZ, bz = mesh.position.z+Math.cos(mesh.rotation.y)*bodyZ;
 
@@ -56370,8 +56718,11 @@ function updateBullets(dt) {
           let t = Math.max(0, Math.min(1, (dox*sx + doy*sy + doz*sz) / segLenSq));
           let cx = px0 + t*sx - hx, cy = py0 + t*sy - (mesh.position.y+headOff), cz = pz0 + t*sz - hz;
           if (cx*cx + cy*cy + cz*cz < headR*headR) {
-            isHeadshot = true; hitX = px0+t*sx; hitY = py0+t*sy; hitZ = pz0+t*sz;
-            hitT = t;
+            // Where the bullet ENTERS the sphere, not where it passes closest to its centre: for a giant (the Warden) those are metres apart,
+            // and a wall between them (or inside it) must not win over a hit that happened first.
+            const te = Math.max(0, t - Math.sqrt(headR*headR - (cx*cx + cy*cy + cz*cz)) / Math.sqrt(segLenSq));
+            isHeadshot = true; hitX = px0+te*sx; hitY = py0+te*sy; hitZ = pz0+te*sz;
+            hitT = te;
             headMissD = Math.sqrt(cx*cx + cy*cy + cz*cz);
           }
           if (!isHeadshot) {
@@ -56380,8 +56731,9 @@ function updateBullets(dt) {
             t = Math.max(0, Math.min(1, (dox*sx + doy*sy + doz*sz) / segLenSq));
             cx = px0+t*sx - bx; cy = py0+t*sy - (mesh.position.y+bodyOff); cz = pz0+t*sz - bz;
             if (cx*cx + cy*cy + cz*cz < bodyR*bodyR) {
-              isBodyHit = true; hitX = px0+t*sx; hitY = py0+t*sy; hitZ = pz0+t*sz;
-              hitT = t;
+              const te = Math.max(0, t - Math.sqrt(bodyR*bodyR - (cx*cx + cy*cy + cz*cz)) / Math.sqrt(segLenSq));   // (where it enters the sphere)
+              isBodyHit = true; hitX = px0+te*sx; hitY = py0+te*sy; hitZ = pz0+te*sz;
+              hitT = te;
             }
           }
         } else {
@@ -58456,7 +58808,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['acid_pool', 8], ['bee_sting', 5],   // 🧪 acid tick / 🐝 bee sting
   ['thunderstorm', 60],
   // Lazy weapons batch
-  ['frost_blaster', 0], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
+  ['frost_blaster', 0], ['boss_minigun', 11], ['boss_missile', 55], ['boss_mortar', 70], ['boss_laser', 16], ['boss_orb', 24], ['boss_shock', 45], ['boss_acid', 12], ['boss_uzi', 8], ['boss_rail', 65], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
   // 🔬 Tech / Physics batch
   ['prism_launcher', 38], ['foam_cannon', 18], ['airburst_projector', 22], ['glassmaker', 28],
   ['freeze_gun'], ['seismic_hammer', 70], ['painter_beam', 6], ['portal_launcher', 10],
@@ -58605,9 +58957,12 @@ function scheduleLocalOutOfBoundsRecovery() {
     setTimeout(() => { if (ds) ds.style.display = 'none'; }, 2400);
     return;
   }
-  if (match?.type === 'dday') {
-    if (dm) dm.textContent = 'Respawning in 3s...';
-    afterDeath(3000, () => {
+  if (match?.type === 'boss') { if (dm) dm.textContent = 'The Warden wins...'; return; }
+  if (holdMode()) {
+    const H = holdRespawn();
+    if (match.type === 'laststand' && !lsAlliesUp()) { if (dm) dm.textContent = 'Your team is down...'; return; }
+    if (dm) dm.textContent = `Respawning in ${H.ms / 1000}s...`;
+    afterDeath(H.ms, () => {
       if (!match || match.over || !isDead) return;
       if (ds) ds.style.display = 'none';
       isDead = false;
@@ -58615,8 +58970,8 @@ function scheduleLocalOutOfBoundsRecovery() {
       if (me) { me.hp = matchMaxHp(); me.dead = false; }
       updateHealthHUD(matchMaxHp());
       resetCombatResources();
-      camera.position.set(-22, 1.65, 22);
-      faceToward(-22, 0);
+      camera.position.set(DDAY_BUNKER_XS[0], 1.65, DDAY_BUNKER_Z);
+      faceToward(DDAY_BUNKER_XS[0], 0);
       socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
       grantSpawnShield(3000);
       requestPointerLockSafe();
@@ -58860,14 +59215,17 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
         // Hide death screen when respawn fires (handled in onEntityDied)
         setTimeout(() => { if (ds) ds.style.display = 'none'; }, 3800);
       }
-    } else if (match && match.type === 'dday') {
-      if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = 'Respawning in 3s...'; }
-      afterDeath(3000, () => {
+    } else if (match && match.type === 'boss') {
+      if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = 'The Warden wins...'; }
+    } else if (match && holdMode()) {
+      const H = holdRespawn();
+      if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = (match.type === 'laststand' && !lsAlliesUp()) ? 'Your team is down...' : `Respawning in ${H.ms / 1000}s...`; }
+      if (!(match.type === 'laststand' && !lsAlliesUp())) afterDeath(H.ms, () => {
         if (!isDead) return;
         if (ds) ds.style.display = 'none';
         isDead = false;
         me.hp = 300; updateHealthHUD(300);
-        camera.position.set(-22, 1.65, 22); faceToward(-22, 0);
+        camera.position.set(H.x, 1.65, H.z); faceToward(H.fx, H.fz);
         grantSpawnShield(3000);
         requestPointerLockSafe();
       });
@@ -59518,15 +59876,18 @@ socket.on('playerDied', data => {
       faceToward(0, 0);   // down the range, at the targets
       socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
       requestPointerLockSafe();
-    } else if (match && match.type === 'dday') {
-      // D-Day: auto-respawn at bunker 0 after 3 seconds, same weapons
-      document.getElementById('death-msg').textContent = 'Respawning in 3s...';
-      afterDeath(3000, () => {
+    } else if (match && match.type === 'boss') {
+      document.getElementById('death-msg').textContent = 'The Warden wins...';
+    } else if (match && holdMode()) {
+      // D-Day / Last Stand: back at the bunker (or the farmhouse) after a few seconds, same weapons
+      const H = holdRespawn();
+      document.getElementById('death-msg').textContent = (match.type === 'laststand' && !lsAlliesUp()) ? 'Your team is down...' : `Respawning in ${H.ms / 1000}s...`;
+      if (!(match.type === 'laststand' && !lsAlliesUp())) afterDeath(H.ms, () => {   // (nobody left to stand with you: the match is ending)
         if (!match || match.over || !isDead) return;
         ds.style.display = 'none';
         isDead = false;
-        camera.position.set(-22, 1.65, 22); // back to bunker 0 slit
-        faceToward(-22, 0);   // out of the slit, toward the enemies (-Z)
+        camera.position.set(H.x, 1.65, H.z); // back to the bunker slit / the farmhouse
+        faceToward(H.fx, H.fz);   // toward the enemies
         socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
         grantSpawnShield(3000);
         requestPointerLockSafe();
@@ -59569,14 +59930,14 @@ socket.on('playerRespawned', p => {
   p = fromWire(p);
   if (p.autoRespawn && match?.type === 'campaign' && resolveBot(p.id)?.campaignActor) return;
   // Elim modes (1v1, 2v2, 3v3): bots stay dead until the round ends. Ignore server auto-respawns.
-  if (p.autoRespawn && p.isBot && match?.type === 'elim') return;
+  if (p.autoRespawn && p.isBot && (match?.type === 'elim' || match?.jugg || match?.type === 'laststand' || match?.type === 'boss')) return;   // (Last Stand: the fallen come back when the wave is over)
   players[p.id]=p;
   if (p.id===myId) {
     isDead = false;
     updateHealthHUD(p.hp || 300);
     resetCombatResources();
-    if (match && match.type === 'dday') {
-      // D-Day: position already set by the 3s respawn timer, just refresh HP
+    if (match && holdMode()) {
+      // D-Day / Last Stand: position already set by the respawn timer, just refresh HP
       if (p.forcedReset) camera.position.set(p.x, 1.65, p.z);
     } else {
       // Always teleport to the player's team side — never trust server's center-ish spawn.
@@ -61862,6 +62223,7 @@ function initMatch() {
   if (cfg.type === 'arcade') initArcadeMode(cfg.subtype);
   if (cfg.type === 'frontlines') initFrontlines();
   if (cfg.type === 'laststand')  initLastStand();
+  if (cfg.type === 'boss')       initBoss();
   if (cfg.type === 'dday')       initDDay();
   if (cfg.type === 'range')      initRange();
   if (cfg.type === 'wave_dash')  resetWaveDash();
@@ -61976,6 +62338,8 @@ function startMatchRound() {
     } else if (match.type === 'dday') {
       showAnnouncement('D-DAY', 'Defend the hill! Enemies incoming!', '#ff9944', 2800);
       setTimeout(() => startDDayPhase('grenades'), 3000);
+    } else if (match.type === 'boss') {
+      startBossFight();
     } else if (match.type === 'laststand') {
       // laststand waves are managed by initLastStand / startNextWave
     } else if (match.type === 'range') {
@@ -62109,11 +62473,18 @@ function updateMatchHUD() {
     L.textContent = dd ? `WAVE ${dd.wavesSent}/3` : '---';
     C.textContent = dd ? `${dd.enemiesAlive} ENEMIES` : '---';
     R.textContent = dd ? (dd.phase === 'complete' ? 'CLEAR!' : dd.phase.toUpperCase()) : '---';
+  } else if (match.type === 'boss') {
+    const B = match.boss, me = players[myId];
+    L.textContent = B ? `PHASE ${B.phase}/3` : '---';
+    C.textContent = B ? `${B.def.icon} ${B.def.name} ${Math.max(0, Math.ceil(B.bot.hp / B.bot.maxHp * 100))}%` : '---';
+    R.textContent = `HP ${me ? Math.max(0, Math.ceil(me.hp)) : 0}`;
   } else if (match.type === 'laststand') {
     const ls = lastStandState;
+    const left = ls ? gameBots.filter(b => b.zombie && !b.dead).length + (ls.toSpawn || 0) : 0;
+    const team = gameBots.filter(b => !b.zombie && b.team === 'ally');
     L.textContent = ls ? `WAVE ${ls.wave}` : '---';
-    C.textContent = ls && ls.phase === 'fight' ? `${gameBots.filter(b=>b.team==='enemy'&&!b.dead).length} LEFT` : ls ? `BUY ${Math.ceil(ls.buyTimer)}s` : '---';
-    R.textContent = ls ? `COINS: ${ls.coins}` : '---';
+    C.textContent = ls && ls.phase === 'fight' ? `🧟 ${left} LEFT` : ls ? `NEXT WAVE ${Math.max(0, Math.ceil((ls.nextWaveAt - Date.now()) / 1000))}s` : '---';
+    R.textContent = ls ? `TEAM ${team.filter(b => !b.dead).length + (isDead ? 0 : 1)}/${team.length + 1}` : '---';
   } else if (match.type === 'range') {
     L.textContent = `SHOTS ${rangeStats.shots}`;
     C.textContent = match.cfg.rangeTitle || 'RANGE';
@@ -62931,6 +63302,8 @@ function onEntityDied(targetId, killerId) {
     updateMatchHUD();
   } else if (match.type === 'frontlines') {
     onFrontlinesKill(targetId, killerId);
+  } else if (match.type === 'boss') {
+    onBossKill(killerId, targetId);
   } else if (match.type === 'laststand') {
     onLastStandKill(killerId, targetId);
   } else if (match.type === 'dday') {
@@ -63108,12 +63481,683 @@ function onFrontlinesKill(targetId, killerId) {
 }
 
 // ── Last Stand stubs (not yet implemented) ─────────────────────────────────
-function initLastStand() {}
-function onLastStandKill() {}
+let _juggUi = null;
+function juggBossUi() {
+  if (_juggUi) return _juggUi;
+  const root = document.createElement('div');
+  root.id = 'jugg-boss';
+  root.style.cssText = 'position:fixed;left:50%;top:58px;transform:translateX(-50%);width:min(560px,86vw);z-index:60;pointer-events:none;display:none;font-family:"Courier New",monospace;text-align:center';
+  const name = document.createElement('div');
+  name.style.cssText = 'font:700 13px "Courier New",monospace;letter-spacing:4px;color:#ff6a5a;text-shadow:0 0 10px rgba(255,40,20,.7),0 1px 2px #000;margin-bottom:3px';
+  const track = document.createElement('div');
+  track.style.cssText = 'position:relative;height:16px;background:rgba(10,4,4,.82);border:2px solid #7a1f18;border-radius:3px;box-shadow:0 0 14px rgba(255,40,20,.35),inset 0 0 8px #000;overflow:hidden';
+  const fill = document.createElement('div');
+  fill.style.cssText = 'position:absolute;left:0;top:0;bottom:0;width:100%;background:linear-gradient(#ff5a46,#a81a12);transition:width .12s linear';
+  const ghost = document.createElement('div');
+  ghost.style.cssText = 'position:absolute;left:0;top:0;bottom:0;width:100%;background:rgba(255,220,200,.55);transition:width .9s ease-out .25s';
+  const num = document.createElement('div');
+  num.style.cssText = 'position:absolute;inset:0;font:700 11px/16px "Courier New",monospace;color:#fff;letter-spacing:1px;text-shadow:0 1px 2px #000';
+  track.appendChild(ghost); track.appendChild(fill); track.appendChild(num);
+  root.appendChild(name); root.appendChild(track);
+  document.body.appendChild(root);
+  return (_juggUi = { root, name, fill, ghost, num });
+}
+// ═════════════════════════════════════════════════════════════════════
+// 🤖 BOSS FIGHT: THE WARDEN. One against one: you, and a giant stationary robot that is every weapon at once. It cannot move, so the fight is
+// about where YOU stand: a minigun arm (a long stream you can strafe), a missile pod (arcing salvos that land where you were), a mortar (red
+// circles on the floor, then shells) and a chest laser (a line, then a sweep). Three phases by its health: the first is the minigun and the
+// missiles, the second adds the mortar and the laser, the third does it all with hardly a pause. Each phase change refills your ammo and gives
+// back some health. It is simulated on this machine like every bot, and it is a bot to the server (a flag keeps it from being one-shot).
+// ═════════════════════════════════════════════════════════════════════
+const BOSS = { pos: [0, 0], player: [0, 52] };     // the arena's middle, and where you start (the far side of the ring)
+// ── what each boss is: its body, its size, its attacks by phase, and how it moves ─────────────────────────────────────────────────
+const BOSS_DEFS = {};
+function bossDef() { return BOSS_DEFS[(match && match.cfg && match.cfg.bossId) || 'warden']; }
+function buildWarden() {
+  const g = new THREE.Group();
+  const steel = new THREE.MeshPhongMaterial({ color: 0x3d4450, shininess: 60, specular: 0x8a94a4 });
+  const dark  = new THREE.MeshPhongMaterial({ color: 0x1c2027, shininess: 40, specular: 0x505866 });
+  const orange = new THREE.MeshPhongMaterial({ color: 0xff8a1a, shininess: 80, specular: 0xffd090 });
+  const redGlow = new THREE.MeshBasicMaterial({ color: 0xff2a2a });
+  const box = (w, h, d, x, y, z, m, par) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); (par || g).add(o); return o; };
+  const cyl = (r0, r1, h, x, y, z, m, par, rx = 0, rz = 0, seg = 14) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg), m); o.position.set(x, y, z); o.rotation.set(rx, 0, rz); (par || g).add(o); return o; };
+  cyl(1.2, 1.3, 0.35, 0, 0.175, 0, dark);                                                           // the pedestal it is bolted to
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.05, 6, 32), orange); ring.rotation.x = Math.PI / 2; ring.position.y = 0.37; g.add(ring);
+  for (const sx of [-1, 1]) { box(0.6, 0.95, 0.7, sx * 0.55, 0.82, 0, steel); box(0.66, 0.16, 0.76, sx * 0.55, 1.12, 0, orange); }   // legs, with knee guards
+  box(1.55, 0.4, 1.05, 0, 1.45, 0, dark);                                                           // pelvis
+  const T = new THREE.Group(); T.position.y = 1.65; g.add(T);                                       // the torso: the part that turns
+  box(1.5, 1.05, 1.0, 0, 0.5, 0, steel, T);
+  box(1.2, 0.7, 0.06, 0, 0.5, 0.52, dark, T);
+  for (let i = 0; i < 4; i++) box(0.9, 0.05, 0.04, 0, 0.25 + i * 0.14, 0.56, orange, T);          // chest vents
+  const lens = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), redGlow); lens.position.set(0, 0.62, 0.58); T.add(lens);   // the laser
+  const lensRing = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.04, 8, 24), dark); lensRing.position.set(0, 0.62, 0.55); T.add(lensRing);
+  box(0.58, 0.42, 0.5, 0, 1.3, 0.04, dark, T);                                                      // the head
+  const eye = box(0.5, 0.1, 0.05, 0, 1.33, 0.3, redGlow, T);
+  cyl(0.02, 0.02, 0.5, 0.2, 1.7, 0, steel, T); cyl(0.02, 0.02, 0.35, -0.2, 1.65, 0, steel, T);       // antennae
+  for (const sx of [-1, 1]) { const sh = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 10), orange); sh.position.set(sx * 0.98, 0.88, 0); T.add(sh); }
+  // left arm: the minigun
+  box(0.32, 0.6, 0.32, -1.0, 0.45, 0.05, steel, T);
+  const MG = new THREE.Group(); MG.position.set(-1.05, 0.2, 0.45); T.add(MG);
+  cyl(0.17, 0.17, 0.55, 0, 0, 0, dark, MG, Math.PI / 2);
+  const barrels = new THREE.Group(); barrels.position.z = 0.5; MG.add(barrels);
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; cyl(0.035, 0.035, 1.0, Math.cos(a) * 0.1, Math.sin(a) * 0.1, 0.1, steel, barrels, Math.PI / 2, 0, 8); }
+  const mgMuzzle = new THREE.Object3D(); mgMuzzle.position.set(0, 0, 1.15); MG.add(mgMuzzle);
+  // right arm: the missile pod
+  box(0.32, 0.6, 0.32, 1.0, 0.45, 0.05, steel, T);
+  const POD = new THREE.Group(); POD.position.set(1.08, 0.25, 0.5); T.add(POD);
+  box(0.62, 0.58, 0.9, 0, 0, 0, orange, POD);
+  const podMuzzles = [];
+  for (let i = 0; i < 6; i++) { const x = (i % 3 - 1) * 0.18, y = (i < 3 ? 0.14 : -0.14); cyl(0.085, 0.085, 0.2, x, y, 0.46, dark, POD, Math.PI / 2, 0, 10); const m = new THREE.Object3D(); m.position.set(x, y, 0.58); POD.add(m); podMuzzles.push(m); }
+  // on the shoulder: the mortar, tilted up and back
+  cyl(0.15, 0.17, 0.85, 0.55, 1.2, -0.3, dark, T, -0.5, 0);
+  const mortarMuzzle = new THREE.Object3D(); mortarMuzzle.position.set(0.55, 1.6, -0.45); T.add(mortarMuzzle);
+  g.userData = { torso: T, lens, eye, barrels, mgMuzzle, podMuzzles, mortarMuzzle, redGlow };
+  return g;
+}
+
+function buildCore() {
+  // 🔷 THE CORE: a caged star. A white-hot heart inside a lattice shell, three gimbal rings turning round it, four pylons in orbit, on a round plinth.
+  const g = new THREE.Group();
+  const dark = new THREE.MeshPhongMaterial({ color: 0x1c2027, shininess: 50, specular: 0x505866 });
+  const add = (c, op) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending });
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 0.22, 24), dark); plinth.position.y = 0.11; g.add(plinth);
+  const mid = new THREE.Group(); mid.position.y = 1.05; g.add(mid);
+  const heart = new THREE.Mesh(new THREE.SphereGeometry(0.62, 20, 16), add(0xb77aff, 0.95)); mid.add(heart);
+  const hot = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 12), add(0xffffff, 0.95)); mid.add(hot);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.95, 18, 14), add(0x7a3aff, 0.2)); mid.add(halo);
+  const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(0.86, 1), new THREE.MeshBasicMaterial({ color: 0x9ad8ff, wireframe: true, transparent: true, opacity: 0.7 })); mid.add(shell);
+  const rings = [];
+  for (const [r, rx, rz] of [[1.15, 0, 0], [1.35, 1.0, 0.4], [1.55, -0.7, 1.1]]) { const holder = new THREE.Group(); holder.rotation.set(rx, 0, rz); mid.add(holder); const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.045, 8, 48), dark); holder.add(ring); const bead = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), add(0x4ad8ff, 1)); bead.position.x = r; holder.add(bead); rings.push(holder); }
+  const pylons = new THREE.Group(); mid.add(pylons);
+  for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2, py = new THREE.Group(); py.position.set(Math.cos(a) * 1.75, 0, Math.sin(a) * 1.75); const b = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), dark); py.add(b); const tip = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), add(0xff4ad8, 1)); tip.position.y = 0.42; py.add(tip); pylons.add(py); }
+  const muzzle = new THREE.Object3D(); mid.add(muzzle);
+  g.userData = { mid, heart, hot, halo, shell, rings, pylons, muzzle, color: heart.material };
+  return g;
+}
+function buildHydra() {
+  // 🐍 THE HYDRA: a squat armoured body with three heads on curving necks. The left head spits acid, the middle one breathes ice, the right one calls lightning.
+  const g = new THREE.Group();
+  const hide = new THREE.MeshPhongMaterial({ color: 0x2f4a36, shininess: 40, specular: 0x6a8a70 });
+  const belly = new THREE.MeshPhongMaterial({ color: 0x6a7a4a, shininess: 20 });
+  const bone = new THREE.MeshPhongMaterial({ color: 0xe8e0c8, shininess: 60 });
+  const glow = c => new THREE.MeshBasicMaterial({ color: c });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), hide); body.scale.set(1.5, 0.75, 1.25); body.position.y = 0.62; g.add(body);
+  const under = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), belly); under.scale.set(1.2, 0.5, 1.05); under.position.set(0, 0.42, 0.18); g.add(under);
+  for (let i = 0; i < 7; i++) { const sp = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 6), bone); sp.position.set((i - 3) * 0.32, 1.28 - Math.abs(i - 3) * 0.06, -0.3); g.add(sp); }   // spines
+  const heads = [];
+  for (const [x, y, z, col, kind] of [[-0.85, 1.5, 0.35, 0x66ff44, 'acid'], [0, 1.72, 0.5, 0x66ddff, 'ice'], [0.85, 1.5, 0.35, 0xffee44, 'bolt']]) {
+    const H = new THREE.Group(); H.position.set(x, y, z); g.add(H);
+    const neckSteps = 5;                                                                                    // the neck: spheres from the body up to the head
+    for (let k = 0; k < neckSteps; k++) { const t = k / neckSteps, n = new THREE.Mesh(new THREE.SphereGeometry(0.22 - 0.02 * k, 10, 8), hide); n.position.set(-x * (1 - t) * 0.0 + x * -0.0, -(1 - t) * 0.75, -(1 - t) * 0.3); H.add(n); }
+    const skull = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.3, 0.6), hide); skull.position.set(0, 0.06, 0.2); H.add(skull);
+    const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.1, 0.5), belly); jaw.position.set(0, -0.12, 0.24); H.add(jaw);
+    for (const sx of [-1, 1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), glow(col)); eye.position.set(sx * 0.15, 0.13, 0.35); H.add(eye); const horn = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.28, 6), bone); horn.position.set(sx * 0.18, 0.28, 0.0); horn.rotation.x = -0.4; H.add(horn); }
+    const mouth = new THREE.Object3D(); mouth.position.set(0, -0.02, 0.55); H.add(mouth);
+    heads.push({ group: H, mouth, kind, color: col, baseY: y });
+  }
+  g.userData = { heads };
+  return g;
+}
+
+function bossBarUi() {
+  const B = match && match.boss; if (!B) return;
+  const U = juggBossUi(), bot = B.bot, max = bot.maxHp, hp = Math.max(0, Math.min(max, bot.hp));
+  U.root.style.display = bot.dead ? 'none' : 'block';
+  const label = `${B.def.icon} ${B.def.name} · PHASE ${B.phase}${B.shield ? ' · 🛡 DEFLECTING' : ''}`;
+  if (U.name.textContent !== label) U.name.textContent = label;
+  const pct = (hp / max * 100).toFixed(2) + '%';
+  U.fill.style.width = pct; U.ghost.style.width = pct;
+  U.num.textContent = Math.ceil(hp).toLocaleString('en-US') + ' / ' + max.toLocaleString('en-US'); U.num.style.textAlign = 'center';
+}
+function initBoss() { match.boss = null; }
+function startBossFight() {
+  const D = bossDef(), hp = D.hp, id = `boss_${D.id}_${Date.now()}`;
+  const pData = { id, name: D.name, isBot: true, team: 'enemy', weaponId: null, ownerId: myId, skin: 'default', x: BOSS.pos[0], y: 1, z: BOSS.pos[1], rotY: 0, rotX: 0, hp, maxHp: hp, dead: false, kills: 0, deaths: 0 };
+  players[id] = pData;
+  spawnRemotePlayer(pData);
+  const mesh = remoteMeshes[id];
+  mesh.position.set(BOSS.pos[0], 0, BOSS.pos[1]); mesh.rotation.y = 0;      // (a bot's body faces -z at 0; the robot is built facing +z, and turns its own torso)
+  mesh.traverse(o => { if (o !== mesh) o.visible = false; });                    // the human body it was made with: gone
+  const robot = D.build(); mesh.add(robot);
+  mesh.scale.setScalar(D.scale); mesh._bodyScale = D.scale; mesh._hitMul = D.hitMul;   // (the hit spheres follow the scale, as the juggernaut's do, and a little more: it is wide)
+  const bot = { id, team: 'enemy', weaponId: null, x: BOSS.pos[0], z: BOSS.pos[1], rotY: 0, hp, maxHp: hp, prevHp: hp, dead: false, state: 'boss', boss: true, floor: 0, floorY: 0,
+                y: 0, yVel: 0, frostSlow: 100, kbVX: 0, kbVZ: 0, wanderAngle: 0, wanderTimer: 0, lastShot: 0, stuckTimer: 0, strafeDir: 1, strafeFlipTimer: 0, tacTimer: 0, coverPt: null,
+                difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), activeSlot: 'primary' };
+  gameBots.push(bot);
+  socket.emit('spawnBots', [{ id, name: D.name, team: absTeam('enemy'), weaponId: null, spawnX: BOSS.pos[0], spawnZ: BOSS.pos[1], hp, skin: 'default', boss: true }]);
+  match.boss = { def: D, bot, robot, mesh, phase: 1, atk: null, nextAt: Date.now() + 3500, nextShield: Date.now() + 8000, shield: false, shieldUntil: 0, rate: 1, lastReflect: 0, proj: [], marks: [], waves: [], pools: [], beam: null, yaw: 0, spin: 0, t: 0, started: Date.now(), done: false };
+  showAnnouncement(D.name, D.intro, D.color, 3200);
+  bossBarUi();
+}
+function bossCleanup() {
+  const B = match && match.boss; if (!B) return;
+  for (const q of B.proj) scene.remove(q.mesh);
+  for (const m of B.marks) scene.remove(m.mesh);
+  for (const w of B.waves) scene.remove(w.mesh);
+  for (const w of B.pools) scene.remove(w.mesh);
+  if (B.beam) { scene.remove(B.beam.mesh); if (B.beam.core) scene.remove(B.beam.core); for (const x of (B.beam.extra || [])) scene.remove(x); }
+  B.proj.length = 0; B.marks.length = 0; B.waves.length = 0; B.pools.length = 0; B.beam = null;
+  try { juggBossUi().root.style.display = 'none'; } catch (e) {}
+  zombieRemove(B.bot);
+  match.boss = null;
+}
+const _bossBulletGeo = new THREE.SphereGeometry(0.13, 8, 6), _bossBulletMat = new THREE.MeshBasicMaterial({ color: 0xffb23a });
+function _bossSegHitsWall(a, b) {
+  const d = b.clone().sub(a), len = d.length(); if (len < 1e-4) return false;
+  const ray = new THREE.Ray(a, d.multiplyScalar(1 / len)), hit = new THREE.Vector3();
+  for (const box of wallColliders) { if (ray.intersectBox(box, hit) && hit.distanceTo(a) <= len) return true; }
+  return false;
+}
+function _bossBoom(pos, radius, dmg, weapon) {
+  spawnExplosion(pos);
+  const c = camera.position, d = Math.hypot(c.x - pos.x, c.z - pos.z, (c.y - 0.8) - pos.y);
+  if (d < radius && !isDead) applyBotDamageToPlayer(weapon, match.boss.bot.id, Math.round(dmg * (1 - 0.6 * d / radius)));
+}
+// A shot: kind 'bullet' | 'missile' | 'acid' (lands as a pool of acid). opts: g, life, color, size, weapon (the damage table key), chill.
+function bossShoot(kind, origin, vel, opts = {}) {
+  const B = match.boss, col = opts.color != null ? opts.color : 0xffb23a;
+  let mesh;
+  if (kind === 'missile') { mesh = new THREE.Group(); const b = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xffd8a0 })); b.rotation.x = Math.PI / 2; mesh.add(b);
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.7, 8), new THREE.MeshBasicMaterial({ color: 0xff5a1a })); f.rotation.x = -Math.PI / 2; f.position.z = -0.7; mesh.add(f); }
+  else if (opts.size || opts.color != null) { mesh = new THREE.Mesh(new THREE.SphereGeometry(opts.size || 0.13, 10, 8), new THREE.MeshBasicMaterial({ color: col })); }
+  else mesh = new THREE.Mesh(_bossBulletGeo, _bossBulletMat);
+  mesh.position.copy(origin); scene.add(mesh);
+  B.proj.push({ kind, mesh, pos: origin.clone(), vel: vel.clone(), g: opts.g || 0, life: opts.life || 4, weapon: opts.weapon || 'boss_minigun', chill: !!opts.chill, hr: opts.hr || 0.55 });
+}
+function _bossAcidPool(B, x, z) {
+  const mesh = new THREE.Mesh(new THREE.CircleGeometry(3.2, 28), new THREE.MeshBasicMaterial({ color: 0x66ff33, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
+  mesh.rotation.x = -Math.PI / 2; mesh.position.set(x, 0.08, z); scene.add(mesh);
+  B.pools.push({ mesh, x, z, r: 3.2, t: 0, life: 5, tick: 0 });
+}
+function _bossUpdateProj(B, dt) {
+  const c = camera.position;
+  for (let i = B.proj.length - 1; i >= 0; i--) {
+    const q = B.proj[i]; q.life -= dt;
+    const prev = q.pos.clone(); q.vel.y -= q.g * dt; q.pos.addScaledVector(q.vel, dt); q.mesh.position.copy(q.pos);
+    if (q.kind === 'missile') q.mesh.lookAt(q.pos.clone().add(q.vel));
+    let dead = q.life <= 0, boom = false;
+    if (!dead && (q.pos.y <= 0.15 || _bossSegHitsWall(prev, q.pos))) { dead = true; boom = true; }
+    let hitMe = false;
+    if (!dead && !isDead) {
+      const dx = c.x - q.pos.x, dz = c.z - q.pos.z, dy = (c.y - 0.7) - q.pos.y, near = Math.hypot(dx, dz);
+      if (q.kind === 'missile') { if (Math.hypot(dx, dy, dz) < 1.6) { dead = true; boom = true; } }
+      else if (near < q.hr && dy > -1.0 && dy < 1.1) { dead = true; hitMe = true; }
+    }
+    if (dead) {
+      if (q.kind === 'missile') { if (boom) _bossBoom(q.pos, 4.6, 55, 'boss_missile'); }
+      else if (q.kind === 'acid') { if (boom) _bossAcidPool(B, q.pos.x, q.pos.z); }
+      else if (hitMe && !isDead) { applyBotDamageToPlayer(q.weapon, B.bot.id); if (q.chill) chillPlayer(1400); }
+      scene.remove(q.mesh); B.proj.splice(i, 1);
+    }
+  }
+  for (let i = B.pools.length - 1; i >= 0; i--) {                                                // acid on the floor: it eats whoever stands in it
+    const w = B.pools[i]; w.t += dt; w.tick += dt; w.mesh.material.opacity = 0.45 * Math.min(1, (w.life - w.t) / 1.2 + 0.05);
+    if (w.tick >= 0.3 && !isDead && Math.hypot(c.x - w.x, c.z - w.z) < w.r && c.y < 2.3) { w.tick = 0; applyBotDamageToPlayer('boss_acid', B.bot.id); }
+    if (w.t >= w.life) { scene.remove(w.mesh); B.pools.splice(i, 1); }
+  }
+  for (let i = B.waves.length - 1; i >= 0; i--) {                                                // a ring along the floor: jump it
+    const w = B.waves[i]; w.r += w.speed * dt; w.mesh.scale.setScalar(w.r); w.mesh.material.opacity = Math.max(0, 0.9 - w.r / 90);
+    if (!w.hit && !isDead && c.y < 2.15 && Math.abs(Math.hypot(c.x - BOSS.pos[0], c.z - BOSS.pos[1]) - w.r) < 1.5) { w.hit = true; applyBotDamageToPlayer('boss_shock', B.bot.id); flashScreen('rgba(180,120,255,0.35)', 260); }
+    if (w.r > 70) { scene.remove(w.mesh); B.waves.splice(i, 1); }
+  }
+}
+// ── the attacks: each is { name, tick(dt) -> true when finished } ──────────────────────────────────────────────────────────────────
+function _bossWorld(obj) { const v = new THREE.Vector3(); obj.getWorldPosition(v); return v; }
+function bossAtkMinigun(B) {
+  const U = B.robot.userData, dur = 2.2 + 0.4 * B.phase; let t = 0, next = 0.7;
+  return { name: 'minigun', tick(dt) {
+    t += dt; B.spin = Math.min(1, t / 0.7);
+    while (t >= next && t < dur) {
+      next += 0.075;
+      const o = _bossWorld(U.mgMuzzle), target = camera.position.clone(); target.y -= 0.4;
+      const dir = target.sub(o).normalize(); dir.x += (Math.random() - 0.5) * 0.07; dir.y += (Math.random() - 0.5) * 0.05; dir.z += (Math.random() - 0.5) * 0.07; dir.normalize();
+      bossShoot('bullet', o, dir.multiplyScalar(78), { life: 2.6 });
+    }
+    if (Math.floor(t * 13) !== Math.floor((t - dt) * 13) && t > 0.7 && t < dur) { try { playWeaponSound('minigun', { remote: true, position: _bossWorld(U.mgMuzzle), volume: 0.8, minGap: 30 }); } catch (e) {} }
+    if (t >= dur) { B.spin = 0; return true; }
+    return false;
+  } };
+}
+function bossAtkMissiles(B) {
+  const U = B.robot.userData, n = B.phase === 3 ? 8 : 6; let t = 0, fired = 0;
+  return { name: 'missiles', tick(dt) {
+    t += dt;
+    while (fired < n && t >= 0.5 + fired * 0.22) {
+      const o = _bossWorld(U.podMuzzles[fired % 6]), T = 1.55, g = 16;
+      const tg = camera.position.clone(); tg.x += (Math.random() - 0.5) * 7; tg.z += (Math.random() - 0.5) * 7; tg.y = 0.3;
+      const v = new THREE.Vector3((tg.x - o.x) / T, (tg.y - o.y + 0.5 * g * T * T) / T, (tg.z - o.z) / T);
+      bossShoot('missile', o, v, { g, life: 4, weapon: 'boss_missile' });
+      try { playSoundEvent('air_burst', { position: o, remote: true, volume: 0.8, minGap: 60 }); } catch (e) {}
+      fired++;
+    }
+    return fired >= n && t > 0.5 + n * 0.22 + 1.9;
+  } };
+}
+// Marks on the floor: circles that fill, then something lands. o: { n, color, radius, fuse, spread, dmg, weapon, bolt }
+function bossAtkMarks(B, o) {
+  let t = 0, made = 0;
+  return { name: o.name, tick(dt) {
+    t += dt;
+    while (made < o.n && t >= 0.3 + made * o.gap) {
+      const a = Math.random() * Math.PI * 2, r = made === 0 ? 0 : 3 + Math.random() * o.spread;
+      const x = camera.position.x + Math.cos(a) * r, z = camera.position.z + Math.sin(a) * r;
+      const mesh = new THREE.Group();
+      const ring = new THREE.Mesh(new THREE.RingGeometry(o.radius - 0.5, o.radius + 0.1, 40), new THREE.MeshBasicMaterial({ color: o.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; mesh.add(ring);
+      const fill = new THREE.Mesh(new THREE.CircleGeometry(o.radius - 0.5, 40), new THREE.MeshBasicMaterial({ color: o.color, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false })); fill.rotation.x = -Math.PI / 2; fill.scale.setScalar(0.05); mesh.add(fill);
+      mesh.position.set(x, 0.12, z); scene.add(mesh);
+      B.marks.push({ mesh, fill, x, z, t: 0, fuse: o.fuse, radius: o.radius, dmg: o.dmg, weapon: o.weapon, bolt: !!o.bolt });
+      try { playSoundEvent('air_burst', { position: new THREE.Vector3(BOSS.pos[0], 6, BOSS.pos[1]), remote: true, volume: 0.9, minGap: 0 }); } catch (e) {}
+      made++;
+    }
+    return made >= o.n && t > 0.3 + o.n * o.gap + o.fuse + 0.1;
+  } };
+}
+function bossAtkMortar(B) { return bossAtkMarks(B, { name: 'mortar', n: B.phase === 3 ? 7 : 5, gap: 0.28, color: 0xff3a2a, radius: 3.8, fuse: 1.5, spread: 8, dmg: 70, weapon: 'boss_mortar' }); }
+function bossAtkBolts(B) { return bossAtkMarks(B, { name: 'bolts', n: B.phase === 3 ? 9 : 6, gap: 0.22, color: 0xffee44, radius: 2.7, fuse: 0.9, spread: 9, dmg: 55, weapon: 'boss_mortar', bolt: true }); }
+function bossAtkLaser(B) {
+  const U = B.robot.userData, bot = B.bot, o0 = _bossWorld(U.lens);
+  const dx = camera.position.x - bot.x, dz = camera.position.z - bot.z, R = Math.max(25, Math.min(100, Math.hypot(dx, dz)));
+  const a0 = Math.atan2(dx, dz), side = Math.random() < 0.5 ? -1 : 1, span = 24 / R;               // a 24 m sweep, however far away you are
+  let t = 0, tick = 0; const charge = B.phase === 3 ? 0.8 : 1.1, sweep = B.phase === 3 ? 1.9 : 2.4;
+  const mk = (color, op, w) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(w, w, 1, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending })); scene.add(m); return m; };
+  const beam = mk(0xff4a3a, 0.35, 0.12), core = mk(0xffffff, 0.9, 0.05); core.visible = false;
+  B.beam = { mesh: beam, core };
+  const aim = (ang) => { const gx = bot.x + Math.sin(ang) * R, gz = bot.z + Math.cos(ang) * R, a = new THREE.Vector3(gx, 0.4, gz), mid = a.clone().add(o0).multiplyScalar(0.5), len = o0.distanceTo(a);
+    for (const m of [beam, core]) { m.position.copy(mid); m.scale.set(1, len, 1); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), a.clone().sub(o0).normalize()); } return a; };
+  return { name: 'laser', tick(dt) {
+    t += dt;
+    if (t < charge) { aim(a0 - side * span / 2); beam.material.opacity = 0.18 + 0.3 * (t / charge); beam.scale.x = 0.4; }       // a thin line first: where it will start
+    else {
+      const k = Math.min(1, (t - charge) / sweep), ang = a0 + side * (-span / 2 + span * k), end = aim(ang);
+      core.visible = true; beam.material.opacity = 0.55; beam.scale.x = 1; B.yaw = ang;
+      tick += dt;
+      if (tick >= 0.12 && !isDead) {
+        tick = 0;
+        const c = camera.position, ab = end.clone().sub(o0), ap = new THREE.Vector3(c.x, c.y - 0.7, c.z).sub(o0), tt = Math.max(0, Math.min(1, ap.dot(ab) / ab.lengthSq()));
+        if (o0.clone().addScaledVector(ab, tt).distanceTo(new THREE.Vector3(c.x, c.y - 0.7, c.z)) < 1.3) applyBotDamageToPlayer('boss_laser', bot.id);
+      }
+      if (k >= 1) { scene.remove(beam); scene.remove(core); B.beam = null; return true; }
+    }
+    return false;
+  } };
+}
+// ── THE CORE's attacks ──
+function bossAtkRing(B) {                                                                                  // a ring of orbs with one gap, at chest height: step through the gap, or jump it
+  let t = 0, fired = 0; const rings = B.phase === 3 ? 4 : 3;
+  return { name: 'ring', tick(dt) {
+    t += dt;
+    while (fired < rings && t >= 0.6 + fired * 1.0) {
+      const o = _bossWorld(B.robot.userData.muzzle), n = 34, gap = Math.random() * Math.PI * 2, y = camera.position.y - 0.7;
+      for (let i = 0; i < n; i++) {
+        const a = i / n * Math.PI * 2 + fired * 0.07; let d = Math.abs(Math.atan2(Math.sin(a - gap), Math.cos(a - gap))); if (d < 0.22) continue;
+        bossShoot('bullet', new THREE.Vector3(o.x, y, o.z), new THREE.Vector3(Math.sin(a) * 25, 0, Math.cos(a) * 25), { life: 4, color: 0xd88aff, size: 0.34, weapon: 'boss_orb', hr: 0.75 });
+      }
+      try { playSoundEvent('air_burst', { position: o, remote: true, volume: 0.9, minGap: 0 }); } catch (e) {}
+      fired++;
+    }
+    return fired >= rings && t > 0.6 + rings + 2.2;
+  } };
+}
+function bossAtkShock(B) {                                                                                  // expanding rings along the floor: jump each one
+  let t = 0, fired = 0; const n = B.phase === 3 ? 4 : 3;
+  return { name: 'shock', tick(dt) {
+    t += dt;
+    while (fired < n && t >= 0.7 + fired * 1.1) {
+      const mesh = new THREE.Mesh(new THREE.RingGeometry(0.93, 1.0, 72), new THREE.MeshBasicMaterial({ color: 0xcc88ff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+      mesh.rotation.x = -Math.PI / 2; mesh.position.set(BOSS.pos[0], 0.15, BOSS.pos[1]); mesh.scale.setScalar(4); scene.add(mesh);
+      B.waves.push({ mesh, r: 4, speed: 21, hit: false });
+      try { playSoundEvent('slam_boom', { position: new THREE.Vector3(BOSS.pos[0], 0, BOSS.pos[1]), remote: true, volume: 1.0, minGap: 0 }); } catch (e) {}
+      fired++;
+    }
+    return fired >= n && t > 0.7 + n * 1.1 + 2.6;
+  } };
+}
+function bossAtkSpokes(B) {                                                                                 // four beams along the floor, turning: step over them, or jump
+  let t = 0, tick = 0; const charge = 1.1, dur = charge + (B.phase === 3 ? 4.2 : 3.6), spd = (B.phase === 3 ? 0.95 : 0.75) * (Math.random() < 0.5 ? -1 : 1), a0 = Math.random() * 6.28;
+  const beams = [];
+  for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 62), new THREE.MeshBasicMaterial({ color: 0xff44ff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending })); m.position.y = 0.9; scene.add(m); beams.push(m); }
+  B.beam = { mesh: beams[0], extra: beams.slice(1) };
+  return { name: 'spokes', tick(dt) {
+    t += dt; const live = t >= charge, ang = a0 + (live ? (t - charge) * spd : 0);
+    beams.forEach((m, i) => { const a = ang + i * Math.PI / 2; m.position.set(BOSS.pos[0] + Math.sin(a) * 31, 0.9, BOSS.pos[1] + Math.cos(a) * 31); m.rotation.y = a; m.material.opacity = live ? 0.75 : 0.15 + 0.3 * (t / charge); m.scale.x = live ? 1 : 0.3; });
+    tick += dt;
+    if (live && tick >= 0.12 && !isDead && camera.position.y < 2.3) {
+      tick = 0;
+      const dx = camera.position.x - BOSS.pos[0], dz = camera.position.z - BOSS.pos[1];
+      for (let i = 0; i < 4; i++) { const a = ang + i * Math.PI / 2, ux = Math.sin(a), uz = Math.cos(a), along = dx * ux + dz * uz, perp = Math.abs(dx * uz - dz * ux); if (along > 3 && along < 62 && perp < 1.3) { applyBotDamageToPlayer('boss_laser', B.bot.id); break; } }
+    }
+    if (t >= dur) { for (const m of beams) scene.remove(m); B.beam = null; return true; }
+    return false;
+  } };
+}
+// ── THE HYDRA's attacks ──
+function bossHeadOf(B, kind) { return B.robot.userData.heads.find(h => h.kind === kind); }
+function bossAtkAcid(B) {
+  const H = bossHeadOf(B, 'acid'); let t = 0, fired = 0; const n = B.phase === 3 ? 6 : 4;
+  return { name: 'acid', tick(dt) {
+    t += dt; H.open = Math.min(1, t * 3);
+    while (fired < n && t >= 0.5 + fired * 0.35) {
+      const o = _bossWorld(H.mouth), T = 1.7, g = 16, tg = camera.position.clone(); tg.x += (Math.random() - 0.5) * 6; tg.z += (Math.random() - 0.5) * 6; tg.y = 0.3;
+      bossShoot('acid', o, new THREE.Vector3((tg.x - o.x) / T, (tg.y - o.y + 0.5 * g * T * T) / T, (tg.z - o.z) / T), { g, life: 4, color: 0x66ff33, size: 0.4 });
+      fired++;
+    }
+    if (t > 0.5 + n * 0.35 + 1.6) { H.open = 0; return true; }
+    return false;
+  } };
+}
+function bossAtkIce(B) {
+  const H = bossHeadOf(B, 'ice'); let t = 0, fired = 0; const volleys = B.phase === 3 ? 4 : 3;
+  return { name: 'ice', tick(dt) {
+    t += dt; H.open = 1;
+    while (fired < volleys && t >= 0.7 + fired * 0.7) {
+      const o = _bossWorld(H.mouth), aim = camera.position.clone(); aim.y -= 0.4; const base = aim.sub(o).normalize();
+      for (let k = -3; k <= 3; k++) { const d = base.clone(); const yaw = k * 0.075, cs = Math.cos(yaw), sn = Math.sin(yaw); const x = d.x * cs - d.z * sn, z = d.x * sn + d.z * cs; d.x = x; d.z = z; bossShoot('bullet', o, d.multiplyScalar(58), { life: 2.4, color: 0x9ae8ff, size: 0.2, weapon: 'boss_minigun', chill: true }); }
+      try { playSoundEvent('air_burst', { position: o, remote: true, volume: 0.8, minGap: 0 }); } catch (e) {}
+      fired++;
+    }
+    if (t > 0.7 + volleys * 0.7 + 1.5) { H.open = 0; return true; }
+    return false;
+  } };
+}
+// ── the extra weapons: an uzi (short, fast bursts that lead you) and a railgun (a line, a held breath, then one hit) ──────────────────
+function bossAtkSpray(B, muzzleOf, color) {
+  let t = 0, fired = 0, burst = 0; const bursts = B.phase === 3 ? 4 : 3, per = 9, gap = 0.06, pause = 0.55;
+  return { name: 'spray', tick(dt) {
+    t += dt;
+    while (burst < bursts && t >= 0.4 + burst * (per * gap + pause) + fired * gap) {
+      const o = muzzleOf(B), lead = camera.position.clone().addScaledVector(B.pv || new THREE.Vector3(), 0.25); lead.y -= 0.4;      // aimed a little ahead of where you are going
+      const dir = lead.sub(o).normalize(); dir.x += (Math.random() - 0.5) * 0.1; dir.y += (Math.random() - 0.5) * 0.06; dir.z += (Math.random() - 0.5) * 0.1; dir.normalize();
+      bossShoot('bullet', o, dir.multiplyScalar(95), { life: 2.2, color, size: 0.17, weapon: 'boss_uzi' });
+      if (fired % 3 === 0) { try { playWeaponSound('mp40', { remote: true, position: o, volume: 0.7, minGap: 40 }); } catch (e) {} }
+      if (++fired >= per) { fired = 0; burst++; }
+    }
+    return burst >= bursts && t > 0.4 + bursts * (per * gap + pause) + 0.8;
+  } };
+}
+function bossAtkRail(B, originOf, color) {
+  const o0 = originOf(B); let t = 0, fired = false, lock = null; const charge = B.phase === 3 ? 1.0 : 1.3;
+  const mk = (c, op, w) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(w, w, 1, 8), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending })); scene.add(m); return m; };
+  const tele = mk(color, 0.3, 0.07); B.beam = { mesh: tele, track: true };
+  const line = (a, b, m) => { const d = b.clone().sub(a), len = d.length(); m.position.copy(a).addScaledVector(d, 0.5); m.scale.set(1, len, 1); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); };
+  return { name: 'rail', tick(dt) {
+    t += dt;
+    const me = new THREE.Vector3(camera.position.x, camera.position.y - 0.6, camera.position.z);
+    if (t < charge) {
+      if (t < charge - 0.35) lock = me.clone();                                                            // it tracks you, then holds the last place it saw you
+      const end = lock.clone().sub(o0).normalize().multiplyScalar(130).add(o0);
+      line(o0, end, tele); tele.material.opacity = 0.15 + 0.5 * (t / charge);
+    } else if (!fired) {
+      fired = true;
+      const dir = lock.clone().sub(o0).normalize(), end = o0.clone().addScaledVector(dir, 130);
+      const bolt = mk(0xffffff, 0.95, 0.22), glow = mk(color, 0.6, 0.6); line(o0, end, bolt); line(o0, end, glow);
+      setTimeout(() => { scene.remove(bolt); scene.remove(glow); }, 200);
+      const ab = end.clone().sub(o0), ap = me.clone().sub(o0), tt = Math.max(0, Math.min(1, ap.dot(ab) / ab.lengthSq()));
+      const near = o0.clone().addScaledVector(ab, tt);
+      if (!isDead && near.distanceTo(me) < 1.1 && !_bossSegHitsWall(o0.clone().add(me.clone().sub(o0).setLength(7)), me)) { applyBotDamageToPlayer('boss_rail', B.bot.id); flashScreen('rgba(255,255,255,0.4)', 220); }
+      try { playSoundEvent('explosion', { position: o0, remote: true, volume: 1.0, minGap: 0 }); } catch (e) {}
+      scene.remove(tele); B.beam = null;
+    }
+    return fired && t > charge + 0.5;
+  } };
+}
+BOSS_DEFS.warden = { id: 'warden', name: 'THE WARDEN', icon: '🤖', color: '#ff6a2a', hp: 6000, scale: 4.5, hitMul: 1.85, build: buildWarden, win: 'THE WARDEN HAS FALLEN',
+  intro: 'A giant robot, and every weapon it owns · 3 phases',
+  phaseText: { 2: 'The Warden opens the mortar and the laser', 3: 'The Warden is enraged' },
+  pools: { 1: [['minigun', 3], ['missiles', 2], ['spray', 2]], 2: [['minigun', 2], ['missiles', 2], ['spray', 2], ['mortar', 2], ['laser', 1.5], ['rail', 1.5]], 3: [['minigun', 2], ['missiles', 2], ['spray', 2], ['mortar', 2], ['laser', 2], ['rail', 2]] },
+  attacks: { minigun: bossAtkMinigun, missiles: bossAtkMissiles, mortar: bossAtkMortar, laser: bossAtkLaser,
+    spray: B => bossAtkSpray(B, b => _bossWorld(b.robot.userData.podMuzzles[Math.floor(Math.random() * 6)]), 0xffc24a),          // the uzi, out of the missile pod's tubes
+    rail: B => bossAtkRail(B, b => _bossWorld(b.robot.userData.lens), 0xff5a3a) },                                                      // the railgun, out of the chest lens
+  onPhase(B, ph) { B.robot.userData.redGlow.color.setHex(ph === 2 ? 0xffa21a : 0xff00aa); },
+  anim(B, dt, now) {
+    const U = B.robot.userData, bot = B.bot;
+    U.barrels.rotation.z += dt * 30 * B.spin; U.lens.scale.setScalar(1 + 0.15 * Math.sin(now / 120));
+    if (!B.beam || B.beam.track) { const want = Math.atan2(camera.position.x - bot.x, camera.position.z - bot.z); let d = want - B.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); B.yaw += d * Math.min(1, dt * (B.phase === 3 ? 3.2 : 2)); }
+    U.torso.rotation.y = B.yaw;
+  } };
+BOSS_DEFS.core = { id: 'core', name: 'THE CORE', icon: '🔷', color: '#b77aff', hp: 5000, scale: 4, hitMul: 1.45, build: buildCore, win: 'THE CORE HAS GONE DARK',
+  intro: 'A caged star · rings to jump, gaps to find, beams to step over',
+  phaseText: { 2: 'The Core spins up its beams', 3: 'The Core goes critical' },
+  pools: { 1: [['ring', 3], ['shock', 2], ['spray', 2]], 2: [['ring', 2], ['shock', 2], ['spray', 2], ['spokes', 2], ['mortar', 1.5], ['rail', 1.5]], 3: [['ring', 2], ['shock', 2], ['spray', 2], ['spokes', 2], ['mortar', 2], ['rail', 2]] },
+  attacks: { ring: bossAtkRing, shock: bossAtkShock, spokes: bossAtkSpokes, mortar: bossAtkMortar,
+    spray: B => bossAtkSpray(B, b => _bossWorld(b.robot.userData.muzzle), 0xff7ae8),                                                    // an uzi of violet bolts out of the heart
+    rail: B => bossAtkRail(B, b => _bossWorld(b.robot.userData.muzzle), 0xb77aff) },
+  onPhase(B, ph) { B.robot.userData.color.color.setHex(ph === 2 ? 0xff7ac8 : 0xff4a4a); },
+  anim(B, dt, now) {
+    const U = B.robot.userData, k = B.phase;
+    U.rings.forEach((r, i) => { r.rotation.y += dt * (0.8 + i * 0.5) * (1 + 0.4 * k); r.rotation.z += dt * 0.3 * (i + 1); });
+    U.pylons.rotation.y += dt * (0.5 + 0.3 * k); U.shell.rotation.y -= dt * 0.4; U.shell.rotation.x += dt * 0.2;
+    const pulse = 1 + 0.08 * Math.sin(now / (200 - 40 * k)); U.heart.scale.setScalar(pulse); U.halo.scale.setScalar(1 + 0.1 * Math.sin(now / 300));
+  } };
+BOSS_DEFS.hydra = { id: 'hydra', name: 'THE HYDRA', icon: '🐍', color: '#66ff66', hp: 5500, scale: 4.5, hitMul: 1.7, build: buildHydra, win: 'THE HYDRA IS SLAIN',
+  intro: 'Three heads: acid, ice and lightning',
+  phaseText: { 2: 'The Hydra rears up: lightning joins the fight', 3: 'All three heads strike at once' },
+  pools: { 1: [['acid', 3], ['ice', 2], ['spray', 2]], 2: [['acid', 2], ['ice', 2], ['spray', 2], ['bolts', 2.5]], 3: [['acid', 2], ['ice', 2], ['spray', 2.5], ['bolts', 2.5]] },
+  attacks: { acid: bossAtkAcid, ice: bossAtkIce, bolts: bossAtkBolts,
+    spray: B => bossAtkSpray(B, b => _bossWorld(bossHeadOf(b, 'bolt').mouth), 0xfff04a) },                                               // an uzi of sparks out of the lightning head
+  onPhase() {},
+  anim(B, dt, now) {
+    const U = B.robot.userData;
+    for (const H of U.heads) {                                                                              // each head turns to look at you, and breathes
+      const g = H.group, w = _bossWorld(g), want = Math.atan2(camera.position.x - w.x, camera.position.z - w.z);
+      let d = want - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * Math.min(1, dt * 4);
+      g.position.y = H.baseY + 0.05 * Math.sin(now / 400 + H.baseY * 7) + (H.open || 0) * 0.08;
+    }
+  } };
+// 🛡️ DEFLECT (the katana's idea): now and then the boss throws up a shield. While it is up shots bounce off (and some are sent back at you) and
+// almost no damage lands: the server cuts it to 5%. It comes rarely in the second phase and often, and for long, in the third.
+const BOSS_SHIELD = { 1: { gap: [9000, 12000], ms: 2200 }, 2: { gap: [15000, 19000], ms: 1500 }, 3: { gap: [4500, 6500], ms: 3200 } };
+function bossShieldOn(B, now) {
+  const S = BOSS_SHIELD[B.phase] || BOSS_SHIELD[3];
+  B.shield = true; B.shieldUntil = now + S.ms;
+  try { socket.emit('bossShield', { id: B.bot.id, ms: S.ms + 150 }); } catch (e) {}
+  if (!B.shieldMesh) {
+    B.shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(2.0, 24, 18), new THREE.MeshBasicMaterial({ color: 0x9ad8ff, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending }));
+    B.shieldMesh.position.y = 1.0; B.mesh.add(B.shieldMesh);
+  }
+  B.shieldMesh.visible = true;
+  showAnnouncement('DEFLECT', 'Shots bounce back: wait it out', '#9ad8ff', 1100);
+  try { playSoundEvent('katana_deflect', { volume: 1.0, minGap: 0 }); } catch (e) {}
+}
+function bossShieldOff(B, now) {
+  B.shield = false; if (B.shieldMesh) B.shieldMesh.visible = false;
+  const S = BOSS_SHIELD[B.phase] || BOSS_SHIELD[3];
+  B.nextShield = now + S.gap[0] + Math.random() * (S.gap[1] - S.gap[0]);
+}
+// What a hit on the boss is worth: no single hit above BOSS_HIT_CAP (and no instakill), the phase it is in (the first is tough, the second the
+// easy one, the third nearly impossible: by its health BEFORE the hit), and 5% while it deflects. (The online game does this on the server.)
+const BOSS_HIT_CAP = 450, BOSS_PHASE_MULT = { 1: 0.6, 2: 1.6, 3: 0.2 }, BOSS_SHIELD_MULT = 0.05;
+function bossScaleDamage(d) {
+  const B = match && match.boss; if (!B || !(d > 0)) return d;
+  const frac = B.bot.maxHp > 0 ? B.bot.hp / B.bot.maxHp : 1;
+  let x = Math.min(d, BOSS_HIT_CAP) * (frac > 0.66 ? BOSS_PHASE_MULT[1] : frac > 0.33 ? BOSS_PHASE_MULT[2] : BOSS_PHASE_MULT[3]);
+  if (B.shield) x *= BOSS_SHIELD_MULT;
+  return Math.max(1, Math.round(x));
+}
+function bossOnHit(pos, weaponId) {                                                                  // called for every hit you land on the boss (see emitHit)
+  const B = match && match.boss; if (!B || !B.shield || !pos) return;
+  const now = performance.now(); if (now - B.lastReflect < 140) return; B.lastReflect = now;
+  const o = pos.clone(), dir = camera.position.clone(); dir.y -= 0.5; dir.sub(o).normalize();
+  bossShoot('bullet', o, dir.multiplyScalar(70), { life: 2, color: 0x9ad8ff, size: 0.2, weapon: 'boss_uzi' });   // a little of it is sent back
+  spawnAbilityAOEFX(o, 1.0, 0x9ad8ff);
+}
+function bossPickAttack(B) {
+  const pool = B.def.pools[B.phase] || B.def.pools[3];
+  let r = Math.random() * pool.reduce((a, x) => a + x[1], 0);
+  for (const [n, w] of pool) { r -= w; if (r < 0) { if (n === B.last && Math.random() < 0.7) return bossPickAttack(B); return n; } }
+  return pool[0][0];
+}
+function bossPhaseUp(B, phase) {
+  B.phase = phase;
+  showAnnouncement(`PHASE ${phase}`, B.def.phaseText[phase] || '', B.def.color, 2600);
+  flashScreen('rgba(255,120,40,0.4)', 500); try { viewKick(0, 0.05, 500); } catch (e) {}
+  try { B.def.onPhase(B, phase); } catch (e) {}
+  const me = players[myId];                                                                   // a breath: full ammo, and some health back
+  if (me && !isDead) { const to = Math.min(matchMaxHp(), me.hp + 100); socket.emit('healSelf', { amount: to - me.hp }); me.hp = to; updateHealthHUD(to); try { resetCombatResources(); } catch (e) {} }
+  B.nextAt = Date.now() + 2200; B.atk = null; B.nextShield = Date.now() + 3500;
+}
+function updateBoss(dt) {
+  const B = match.boss; if (!B || match.over || B.done) return;
+  const bot = B.bot, now = Date.now();
+  B.t += dt;
+  { const c = camera.position; if (B.lastPos && dt > 0) { B.pv = c.clone().sub(B.lastPos).multiplyScalar(1 / dt); B.pv.y = 0; } B.lastPos = c.clone(); }     // where you are going, for the uzi
+  _bossUpdateProj(B, dt);
+  for (let i = B.marks.length - 1; i >= 0; i--) {                                                // the circles fill, then it lands
+    const m = B.marks[i]; m.t += dt; const k = Math.min(1, m.t / m.fuse);
+    m.fill.scale.setScalar(Math.max(0.05, k)); m.fill.material.opacity = 0.2 + 0.4 * k; m.mesh.children[0].material.opacity = 0.5 + 0.5 * Math.abs(Math.sin(m.t * 12));
+    if (m.t >= m.fuse) {
+      if (m.bolt) {                                                                               // lightning: a column of light, and a hit if you are in the circle
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(m.radius * 0.45, m.radius * 0.45, 40, 10), new THREE.MeshBasicMaterial({ color: 0xfff6a0, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+        col.position.set(m.x, 20, m.z); scene.add(col); setTimeout(() => scene.remove(col), 180);
+        const c = camera.position; if (!isDead && Math.hypot(c.x - m.x, c.z - m.z) < m.radius) applyBotDamageToPlayer(m.weapon, bot.id, 55);
+        try { playSoundEvent('explosion', { position: new THREE.Vector3(m.x, 1, m.z), remote: true, volume: 0.8, minGap: 30 }); } catch (e) {}
+      } else _bossBoom(new THREE.Vector3(m.x, 0.3, m.z), m.radius, m.dmg, m.weapon);
+      scene.remove(m.mesh); B.marks.splice(i, 1);
+    }
+  }
+  if (bot.dead) return;
+  const frac = bot.hp / bot.maxHp, ph = frac > 0.66 ? 1 : frac > 0.33 ? 2 : 3;
+  if (ph > B.phase) bossPhaseUp(B, ph);
+  B.rate = 1 + 2.2 * (1 - frac);                                                                  // the more you hurt it, the faster its guns fire (up to three times as fast)
+  if (!B.shield && now >= B.nextShield && !isDead) bossShieldOn(B, now);
+  else if (B.shield) { if (now >= B.shieldUntil) bossShieldOff(B, now); else if (B.shieldMesh) B.shieldMesh.material.opacity = 0.22 + 0.12 * Math.sin(now / 90); }
+  B.def.anim(B, dt, now);
+  if (B.atk) {
+    const calm = B.atk.name === 'laser' || B.atk.name === 'rail' || B.atk.name === 'spokes' || B.atk.name === 'shock';   // (a warning line or a ring does not get faster: it must stay readable)
+    if (B.atk.tick(dt * (calm ? Math.min(1.5, B.rate) : B.rate))) { B.last = B.atk.name; B.atk = null; B.nextAt = now + (B.phase === 1 ? 1700 : B.phase === 2 ? 1200 : 700) / B.rate; }
+  }
+  else if (now >= B.nextAt && !isDead) B.atk = B.def.attacks[bossPickAttack(B)](B);
+  bossBarUi();
+  updateMatchHUD();
+}
+function onBossKill(killerId, targetId) {
+  const B = match && match.boss; if (!B) return;
+  if (targetId === myId) {                                                                     // you fell: it wins
+    B.done = true; const m = match;
+    showAnnouncement('DEFEAT', `${B.def.name} stands`, '#ff4444', 2600);
+    setTimeout(() => { if (match === m && !m.over) endMatch('enemy', `${B.def.icon} ${B.def.name} stands · it was down to ${Math.max(0, Math.round(B.bot.hp / B.bot.maxHp * 100))}%`); }, 1800);
+    return;
+  }
+  if (targetId === B.bot.id) {                                                                 // it falls
+    B.done = true; const m = match, at = _bossWorld(B.mesh);
+    for (const q of B.proj) scene.remove(q.mesh); B.proj.length = 0;
+    for (const k of B.marks) scene.remove(k.mesh); B.marks.length = 0;
+    for (const w of B.waves) scene.remove(w.mesh); B.waves.length = 0;
+    for (const w of B.pools) scene.remove(w.mesh); B.pools.length = 0;
+    if (B.beam) { scene.remove(B.beam.mesh); if (B.beam.core) scene.remove(B.beam.core); for (const x of (B.beam.extra || [])) scene.remove(x); B.beam = null; }
+    showAnnouncement('VICTORY', B.def.win, '#4cff4c', 3200);
+    for (let i = 0; i < 9; i++) setTimeout(() => { if (match !== m) return; spawnExplosion(new THREE.Vector3(at.x + (Math.random() - 0.5) * 8, 2 + Math.random() * 9, at.z + (Math.random() - 0.5) * 6)); }, i * 260);
+    const secs = Math.round((Date.now() - B.started) / 1000);
+    setTimeout(() => { if (match === m && !m.over) endMatch('ally', `${B.def.icon} ${B.def.win} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`); }, 3400);
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// 🧟 LAST STAND. Endless waves of the dead (the same zombies as Zombie Tower: they skip the bot AI, walk the route to whatever is
+// nearest and claw it) against you and three teammates, who are bots with ordinary guns and fight back. You hold the Battlefield's
+// farmhouse. The dead go for whichever of you is closest, so the team is a wall, not a crowd of targets. A teammate who falls stays
+// down until the wave is over, then comes back ("reinforcements"), and you come back 6 s after you fall as long as one of them is
+// still up; the match is lost when you are down and nobody is left to stand. Between waves: a little health, and a full magazine.
+// ═════════════════════════════════════════════════════════════════════
+const LS_PLAYER = [0, 0], LS_ALLIES = [[-6, -3], [6, -3], [0, 5]];
+const LS_FIRST_MS = 5000, LS_BREAK_MS = 7000, LS_CAP = 30, LS_HEAL = 60, LS_RESPAWN_MS = 6000, LS_MAX_MS = 75000;
+function lsWaveSize(w) { return Math.round(zombieWaveSize(w) * 1.5); }       // four of you: more of them
+function initLastStand() {
+  let best = 0; try { best = parseInt(localStorage.getItem('pvp_laststand_best') || '0', 10) || 0; } catch (e) {}
+  lastStandState = { wave: 0, phase: 'break', started: false, nextWaveAt: 0, toSpawn: 0, nextSpawnAt: 0, waveStartedAt: 0, kills: 0, best };
+  match.zombie = { wave: 0, kills: 0, n: 0, tower: null, storyLock: false };   // (zombieSpawn counts its zombies on this)
+}
+function lsAlliesUp() { return gameBots.some(b => !b.zombie && b.team === 'ally' && !b.dead); }
+function lsCleanup() { for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b); lastStandState = null; }
+function lsWipeCheck() {
+  const L = lastStandState;
+  if (!L || !match || match.over || L.wiped || !isDead || lsAlliesUp()) return;
+  L.wiped = true;
+  setTimeout(() => {
+    if (!match || match.over) return;
+    showAnnouncement('OVERRUN', `Your team is down · wave ${L.wave}`, '#ff2222', 3000);
+    setTimeout(() => { if (match && !match.over) endMatch('enemy', `🧟 OVERRUN on wave ${L.wave} · ${L.kills} zombies killed`); }, 1600);
+  }, 900);
+}
+function onLastStandKill(killerId, targetId) {
+  const L = lastStandState; if (!L || !match) return;
+  const bot = gameBots.find(b => b.id === targetId);
+  if (bot && bot.zombie) {
+    L.kills++; match.zombie.kills = L.kills;
+    if (killerId === myId) match.ffaKills[myId] = (match.ffaKills[myId] || 0) + 1;
+    setTimeout(() => zombieRemove(bot), 2600);                  // the body lies there a moment
+    updateMatchHUD();
+    return;
+  }
+  lsWipeCheck();
+}
+function zombieClawsBot(z, a) {
+  if (!a || a.dead) return;
+  a.hp = Math.max(0, a.hp - 30);
+  if (a.hp <= 0) {
+    a.dead = true;
+    socket.emit('hitBot', { botId: a.id, weapon: 'zombie_claw', bulletId: `zc_${Date.now()}`, killerId: z.id, headshot: true, instakill: true });
+  }
+}
+function lsRevive() {                                                  // reinforcements: the fallen come back at the farmhouse
+  let i = 0;
+  for (const bot of gameBots) {
+    if (bot.zombie || bot.team !== 'ally') continue;
+    const sp = LS_ALLIES[(i++) % LS_ALLIES.length];
+    const was = bot.dead;
+    bot.hp = Math.min(bot.maxHp || 300, was ? (bot.maxHp || 300) : bot.hp + LS_HEAL * 2);
+    if (!was) { if (players[bot.id]) players[bot.id].hp = bot.hp; continue; }
+    bot.dead = false; bot.prevHp = bot.hp; bot.stuckTimer = 0; bot.state = 'chase'; bot.x = sp[0]; bot.z = sp[1];
+    if (players[bot.id]) { players[bot.id].hp = bot.hp; players[bot.id].dead = false; }
+    syncBotMesh(bot, { visible: true, resetPose: true });
+    socket.emit('forceRespawnBot', { id: bot.id, x: bot.x, z: bot.z, weaponId: bot.weaponId });
+  }
+}
+function updateLastStand(dt) {
+  const L = lastStandState; if (!L || !match || match.over) return;
+  const now = Date.now();
+  if (!L.started) {
+    L.started = true; L.nextWaveAt = now + LS_FIRST_MS;
+    showAnnouncement('LAST STAND', 'Hold the farmhouse · your team is with you', '#ff9944', 2800);
+  }
+  lsWipeCheck();
+  const alive = gameBots.filter(b => b.zombie && !b.dead).length;
+  if (L.phase === 'break') {
+    if (now >= L.nextWaveAt) {
+      L.wave++; L.phase = 'fight'; L.toSpawn = lsWaveSize(L.wave); L.waveStartedAt = now; L.nextSpawnAt = now; match.zombie.wave = L.wave;
+      if (L.wave > L.best) { L.best = L.wave; try { localStorage.setItem('pvp_laststand_best', String(L.best)); } catch (e) {} }
+      showAnnouncement(`🧟 WAVE ${L.wave}`, `${L.toSpawn} zombies · ${Math.round(zombieHpFor(L.wave))} HP each`, '#66dd66', 2200);
+      playSoundEvent('hitmarker', { volume: 0.8, minGap: 0, tier: 'orange' });
+    }
+    updateMatchHUD();
+    return;
+  }
+  if (L.toSpawn > 0 && alive < LS_CAP && now >= L.nextSpawnAt) {
+    zombieSpawn(); L.toSpawn--;
+    L.nextSpawnAt = now + Math.max(300, 900 - L.wave * 35);
+  }
+  const waveOver = L.toSpawn === 0 && alive === 0;
+  if (waveOver || (L.toSpawn === 0 && now - L.waveStartedAt > LS_MAX_MS)) {
+    L.phase = 'break'; L.nextWaveAt = now + (waveOver ? LS_BREAK_MS : 800);
+    if (waveOver) {
+      const me = players[myId];
+      if (me && me.hp > 0 && !isDead) { const to = Math.min(matchMaxHp(), me.hp + LS_HEAL); socket.emit('healSelf', { amount: to - me.hp }); me.hp = to; updateHealthHUD(to); }
+      lsRevive();
+      if (!isDead) { try { resetCombatResources(); } catch (e) {} }                        // a full magazine, and the pockets filled
+      showAnnouncement(`WAVE ${L.wave} CLEARED`, `+${LS_HEAL} HP · full ammo · teammates back on their feet`, '#aaffaa', 2200);
+    }
+  }
+  updateMatchHUD();
+}
 
 // ── D-Day mode ──────────────────────────────────────────────────────────────
+// The Battlefield is 120 x 160: the defenders now hold the south trench line and the attackers start from the far north
+// edge, so they cross the whole of no man's land (farmhouse, craters, hedgerows) instead of a 60 m strip of it. Fewer
+// troopers, more ground: 12 + 12 + 26 where it used to be 20 + 20 + 50.
 const DDAY_BUNKER_XS = [-22, -7, 7, 22];
-const DDAY_BUNKER_Z  = 24;
+const DDAY_BUNKER_Z  = 44;       // between the two sandbag rows of the south trench line
+const DDAY_SPAWN_Z   = -70;      // the attackers' start (inside the north spawn zone)
+const DDAY_SPREAD    = 96;       // how wide they line up
+const DDAY_WAVES     = [12, 12, 26];
 
 function initDDay() {
   ddayState = {
@@ -63148,18 +64192,18 @@ function startDDayPhase(phase) {
     setTimeout(() => startDDayPhase('wave1'), 5000);
   } else if (phase === 'wave1') {
     ddayState.wavesSent = 1;
-    showAnnouncement('WAVE 1', '20 troops charging the hill!', '#ff9944', 2800);
-    spawnDDayWave(20, 1);
+    showAnnouncement('WAVE 1', `${DDAY_WAVES[0]} troops charging the hill!`, '#ff9944', 2800);
+    spawnDDayWave(DDAY_WAVES[0], 1);
     ddayState.wave2Timer = setTimeout(() => startDDayPhase('wave2'), 10000);
   } else if (phase === 'wave2') {
     ddayState.wavesSent = 2;
-    showAnnouncement('WAVE 2', '20 more troops incoming!', '#ff7722', 2800);
-    spawnDDayWave(20, 2);
+    showAnnouncement('WAVE 2', `${DDAY_WAVES[1]} more troops incoming!`, '#ff7722', 2800);
+    spawnDDayWave(DDAY_WAVES[1], 2);
     ddayState.wave3Timer = setTimeout(() => startDDayPhase('wave3'), 30000);
   } else if (phase === 'wave3') {
     ddayState.wavesSent = 3;
-    showAnnouncement('FINAL WAVE', '50 troops — HOLD THE LINE!', '#ff2222', 3000);
-    spawnDDayWave(50, 3);
+    showAnnouncement('FINAL WAVE', `${DDAY_WAVES[2]} troops — HOLD THE LINE!`, '#ff2222', 3000);
+    spawnDDayWave(DDAY_WAVES[2], 3);
     ddayState.phase = 'final';
   }
   updateMatchHUD();
@@ -63169,11 +64213,11 @@ function spawnDDayWave(count, waveNum) {
   if (!match || match.over) return;
   const now = Date.now();
   const botList = [];
-  const spread  = 80;
+  const spread  = DDAY_SPREAD;
   for (let i = 0; i < count; i++) {
     const id = `dday_w${waveNum}_${i}_${now}`;
     const xPos = ((i / Math.max(count-1, 1)) - 0.5) * spread + (Math.random()-0.5) * 3;
-    const zPos = -40 - Math.random() * 4;
+    const zPos = DDAY_SPAWN_Z - Math.random() * 4;
     const weaponId = randomPrimaryId();
     const pData = {
       id, name: `Trooper ${waveNum}-${i+1}`, isBot: true, team: 'enemy',
@@ -63241,10 +64285,10 @@ function onDDayKill(targetId, killerId) {
 function spawnDDayGrenadeRain() {
   const mat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
   ddayGrenades.length = 0;
-  for (let i = 0; i < 35; i++) {
+  for (let i = 0; i < 45; i++) {
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 6), mat);
-    const x  = (Math.random()-0.5) * 90;
-    const gz = Math.random() * 80 - 38; // whole map
+    const x  = (Math.random()-0.5) * 100;
+    const gz = Math.random() * 130 - 66; // from the attackers' start to the defenders' line
     mesh.position.set(x, 22 + Math.random() * 12, gz);
     scene.add(mesh);
     ddayGrenades.push({
@@ -63358,6 +64402,8 @@ function updateMatchTimer(dt) {
     rouletteShuffle();
   }
   if (match.arcade === 'zombie' && match.roundActive) updateZombieMode(dt);
+  if (match.type === 'boss') { if (match.roundActive) updateBoss(dt); return; }
+  if (match.type === 'laststand') { if (match.roundActive) updateLastStand(dt); return; }
   if (matchTimeUnlimited()) { clearEndCountdown();updateMatchHUD(); return; }
   // ── Elim mode: per-round 60-second timer ─────────────────────────────────
   if (match.type === 'elim') {
@@ -63511,6 +64557,8 @@ function endMatch(winner, reason) {
   if (match.type === 'wave_dash') stopWaveDash();
   if (match.dice) diceCleanup();
   if (match.arcade === 'zombie') zombieCleanup();
+  if (match.type === 'laststand') lsCleanup();
+  if (match.type === 'boss') bossCleanup();
   rngRestore(match.roulette);
   const isWin  = winner === 'ally';
   releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
@@ -63531,6 +64579,11 @@ function endMatch(winner, reason) {
     scoreText = match.cfg.forcedMap === 'base_raid'
       ? `Raid progress  Guards cleared ${match.teamKills.ally}/${match.cfg.killGoal}  ·  Team losses ${match.teamKills.enemy}`
       : `Kills  Your Team ${match.teamKills.ally}  ·  Enemy ${match.teamKills.enemy}  (goal ${match.cfg.killGoal})`;
+  } else if (match.type === 'boss') {
+    scoreText = match.boss ? `${match.boss.def.name}: ${Math.max(0, Math.ceil(match.boss.bot.hp / match.boss.bot.maxHp * 100))}% left  ·  Phase ${match.boss.phase}/3` : '';
+  } else if (match.type === 'laststand') {
+    const ls = lastStandState;
+    scoreText = ls ? `Waves survived: ${Math.max(0, ls.wave - 1)}  ·  Zombies killed: ${ls.kills}  ·  Best: wave ${ls.best}` : '';
   } else if (match.type === 'dday') {
     const dd = ddayState;
     scoreText = dd ? `Waves survived: ${dd.wavesSent}/3  ·  Enemies killed: ${dd.totalKills || 0}` : '';
@@ -63588,6 +64641,11 @@ function endMatch(winner, reason) {
 // ── Bot AI ─────────────────────────────────────────────────────────────────
 function botSideSpawn(idx, count, team) {
   if(selectedModeConfig?.type==='lobby')return lobbySpawnPoint(idx);
+  // Last Stand: the teammates stand in the farmhouse with you
+  if (selectedModeConfig && selectedModeConfig.type === 'laststand' && team === 'ally') {
+    const sp = LS_ALLIES[idx % LS_ALLIES.length];
+    return { x: sp[0], z: sp[1] };
+  }
   { const S = MAP_SPAWNS[activeMapName]; if (S) {   // a hand-built map names where each side starts
     const r = absTeam(team) === 'ally' ? S.ally : S.enemy, f = count <= 1 ? Math.random() : idx / (count - 1);
     return { x: r.x0 + (r.x1 - r.x0) * (0.1 + 0.8 * f) + (Math.random() - 0.5) * 2, z: r.z0 + Math.random() * (r.z1 - r.z0) }; } }
@@ -63607,8 +64665,8 @@ function botSideSpawn(idx, count, team) {
   }
   // D-Day ally bots: place in bunkers 1, 2, 3 (player is in bunker 0)
   if (selectedModeConfig && selectedModeConfig.type === 'dday' && team === 'ally') {
-    const bunkerXs = [-7, 7, 22]; // bunkers 1, 2, 3
-    return { x: bunkerXs[idx] || 0, z: 22 }; // near slit, inside bunker
+    const bunkerXs = DDAY_BUNKER_XS.slice(1); // bunkers 1, 2, 3
+    return { x: bunkerXs[idx] || 0, z: DDAY_BUNKER_Z }; // near slit, inside bunker
   }
   // 🛋️ Lobby 13: scatter the cast around the lounge (avoid the duel pit at x≈-22).
   if (selectedModeConfig && selectedModeConfig.type === 'lobby') {
@@ -63881,8 +64939,12 @@ function spawnGameBots() {
   const botList = [];
 
   // Move the player to their team side before the round begins
-  if (selectedModeConfig && selectedModeConfig.type === 'dday') {
-    camera.position.set(-22, 1.65, 22); faceToward(-22, 0); // D-Day: inside bunker 0, facing enemies
+  if (selectedModeConfig && selectedModeConfig.type === 'boss') {
+    camera.position.set(BOSS.player[0], 1.65, BOSS.player[1]); faceToward(BOSS.pos[0], BOSS.pos[1]);   // Boss fight: the far end, facing it
+  } else if (selectedModeConfig && selectedModeConfig.type === 'laststand') {
+    camera.position.set(LS_PLAYER[0], 1.65, LS_PLAYER[1]); faceToward(0, -30);   // Last Stand: in the farmhouse
+  } else if (selectedModeConfig && selectedModeConfig.type === 'dday') {
+    camera.position.set(DDAY_BUNKER_XS[0], 1.65, DDAY_BUNKER_Z); faceToward(DDAY_BUNKER_XS[0], 0); // D-Day: inside bunker 0, facing enemies
   } else if (selectedModeConfig && selectedModeConfig.type === 'range') {
     camera.position.set(0, 1.65, 38); faceToward(0, 0); // Shooting range: down the range at the targets
   } else if (selectedModeConfig && selectedModeConfig.type === 'obby') {
@@ -64511,18 +65573,34 @@ function zombieRemove(bot) {
   delete players[bot.id];
   if (socket && socket.connected) socket.emit('despawnBots', [bot.id]);
 }
+// The nearest living thing a zombie can go for: you, and in Last Stand your teammates too.
+function zombieTargetFor(bot) {
+  let best = null, bd = Infinity;
+  if (!isDead) { bd = Math.hypot(camera.position.x - bot.x, camera.position.z - bot.z); best = { x: camera.position.x, y: camera.position.y, z: camera.position.z, isPlayer: true, bot: null }; }
+  if (match && match.type === 'laststand') {
+    for (const o of gameBots) {
+      if (o.zombie || o.dead || o.team !== 'ally') continue;
+      const d = Math.hypot(o.x - bot.x, o.z - bot.z);
+      if (d < bd) { bd = d; best = { x: o.x, y: (o.y || 0) + 1.65, z: o.z, isPlayer: false, bot: o }; }
+    }
+  }
+  return best;
+}
 function zombieThink(bot, dt, now) {
-  if (isDead || !match || match.over) { syncBotMesh(bot); return; }
+  const ls = !!(match && match.type === 'laststand');
+  if (!match || match.over || (isDead && !ls)) { syncBotMesh(bot); return; }
+  const tgt = zombieTargetFor(bot);
+  if (!tgt) { syncBotMesh(bot); return; }
   let spd = bot.zSpeed || 3.4;
   if (bot.frostSlow != null) spd *= Math.max(0.15, bot.frostSlow / 100);
   if (now < (bot._chillUntil || 0)) spd *= 0.5;
   if (now < (bot._rootUntil || 0)) spd = 0;
-  const me = camera.position;
+  const me = tgt;
   const dx = me.x - bot.x, dz = me.z - bot.z, dist = Math.hypot(dx, dz) || 0.001;
   bot.rotY = Math.atan2(-dx, -dz);
   if (dist > 1.25 && spd > 0 && (bot.y || 0) < 0.6) {
     let tx = me.x, tz = me.z;
-    const wp = botNavPoint(bot, { x: me.x, z: me.z, isPlayer: true });
+    const wp = botNavPoint(bot, { x: me.x, z: me.z, isPlayer: tgt.isPlayer });
     if (wp) { tx = wp.x; tz = wp.z; }
     const ddx = tx - bot.x, ddz = tz - bot.z, dd = Math.hypot(ddx, ddz) || 1;
     let nx = bot.x + ddx / dd * spd * dt, nz = bot.z + ddz / dd * spd * dt;
@@ -64540,7 +65618,7 @@ function zombieThink(bot, dt, now) {
   if (bot._windup && now >= bot._windup) {
     bot._windup = 0; bot.lastAtk = now;
     if (dist < 2.2 && sameLevel) {
-      botHitsMe(bot.id, 'zombie_claw');
+      if (tgt.isPlayer) botHitsMe(bot.id, 'zombie_claw'); else zombieClawsBot(bot, tgt.bot);
       spawnHitParticle(new THREE.Vector3(bot.x + dx / dist * 0.9, 1.3, bot.z + dz / dist * 0.9));
     }
   }
@@ -64820,7 +65898,7 @@ function getBotTarget(bot) {
 
   // D-Day attackers: advance toward bunker line, target nearest defender
   if (bot.state === 'dday_attacker') {
-    let best = null, bestDist = 40; // only attack if within 40 units
+    let best = null, bestDist = 55; // only attack if within 55 units (the field is bigger now)
     // Player
     if (!isDead) {
       const d = Math.hypot(camera.position.x - bot.x, camera.position.z - bot.z);
@@ -64832,8 +65910,8 @@ function getBotTarget(bot) {
       const d = Math.hypot(ob.x - bot.x, ob.z - bot.z);
       if (d < bestDist) { bestDist = d; best = { x: ob.x, z: ob.z, isPlayer: false, botRef: ob }; }
     }
-    // If no target in range, just advance up the map (toward z=+30)
-    if (!best) return { x: bot.x + (Math.random()-0.5)*4, z: 30, isPlayer: false };
+    // If no target in range, just advance up the map toward the defenders' line
+    if (!best) return { x: bot.x + (Math.random()-0.5)*4, z: DDAY_BUNKER_Z - 8, isPlayer: false };
     return best;
   }
 
@@ -65387,6 +66465,7 @@ function updateBotAI(dt) {
     // During countdown: bots walk toward the centre so they're in position when it ends
     if (!roundLive) continue; // frozen during countdown
     if (bot.squad) { zombieSquadThink(bot, dt); continue; }    // 🪖 the squad in Zombie Survival's opening: they walk with you
+    if (bot.boss) continue;                                      // 🤖 the Warden is driven by updateBoss (and does not move)
     if (bot.zombie) { zombieThink(bot, dt, now); continue; }   // 🧟 a zombie has no aim, no cover and no plan: it comes for you
     try {
 
@@ -68848,6 +69927,8 @@ function teardownMatchWorld() {
   inLobby = false;
   if (match && match.dice) diceCleanup();
   if (match && match.arcade === 'zombie') zombieCleanup();
+  if (match && match.type === 'laststand') lsCleanup();
+  if (match && match.type === 'boss') bossCleanup();
   if (match && match.roulette) rngRestore(match.roulette);
   match = null;
   pvpMatch = null; // else the next non-lobby mode spawns the previous lobby's bot counts

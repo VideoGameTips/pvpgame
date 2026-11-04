@@ -7,6 +7,8 @@ Play: https://videogametips.github.io/pvpgame/
 
 ## Included
 
+Three 1v1 boss fights (the Warden, the Core and the Hydra, in a round arena), Last Stand
+(zombie waves with three bot teammates), a longer-field D-Day with fewer troopers,
 Underworld story campaign, Backrooms Levels 0-9, zombie survival, base raid,
 training range, aim trainer, obby, wave mode, maps, weapons, skins and ragdolls.
 Arena matches are single-player bot matches; no human multiplayer exists here.

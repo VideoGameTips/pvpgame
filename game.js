@@ -882,6 +882,19 @@ const WEAPONS = [
     adminItem:true,prototype:true,damageLabel:'\u03a9',mag:1,reserve:0,damage:9999,fireRate:900,reloadTime:0,
     auto:false,pellets:1,spread:0,adsZoom:45,bulletSpeed:300,bulletColor:0xffffff,bulletSize:.06,
     noReload:true,hitscan:true,hitscanRange:100 },
+  { id: 'phase_rifle', name: 'Phase Rifle', type: 'Sci-Fi Rifle', slot: 'primary',
+    mag: 30, reserve: 90, damage: 22, fireRate: 90, reloadTime: 2000, headshotMult: 2.2,
+    auto: true, pellets: 1, spread: 0.002, adsZoom: 50, bulletSpeed: 135, noReload: false,
+    bulletColor: 0x66f0ff, bulletSize: 0.04,
+    // Rounds go through walls and cover for half damage while it lasts, and every enemy glows through them (see PHASE_FX).
+    ability: { name: 'Phase Shift', cd: 18000, desc: '4s · rounds pass through walls for half damage · enemies glow through cover', type: 'buff', duration: 4000, weaponAbId: 'phase_rifle_ph', bulletColor: 0xc47bff, vision: true },
+  },
+  { id: 'chrono_pistol', name: 'Chrono Pistol', type: 'Admin · Time Pistol', slot: 'secondary',
+    mag: 12, reserve: 48, damage: 34, fireRate: 140, reloadTime: 1300,
+    auto: false, pellets: 1, spread: 0.004, adsZoom: 50, bulletSpeed: 170, noReload: false,
+    bulletColor: 0x7af4ff, bulletSize: 0.04, adminItem: true,
+    ability: { name: 'Rewind', cd: 22000, desc: 'Snap back to where you were 3 s ago, with the health you had then', type: 'rewind', rewindMs: 3000 },
+  },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -950,6 +963,7 @@ Object.assign(WEAPON_FALLOFF, {
   pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM,
   throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM,
   gatecrasher_slug: FALLOFF_MARKSMAN, gatecrasher_beam: FALLOFF_NONE, continuum: FALLOFF_HEAVY_PISTOL,
+  phase_rifle: FALLOFF_AR, phase_rifle_ph: FALLOFF_AR, chrono_pistol: FALLOFF_SIDEARM,
   lancer: FALLOFF_MARKSMAN, laser_pointer: { near: 20, far: 90, min: 0.85 },
   event_horizon: FALLOFF_ENERGY, storm_core: FALLOFF_ENERGY, abs_zero: FALLOFF_ENERGY,
   quantum_repeater: FALLOFF_ENERGY, pulse_needle: FALLOFF_ENERGY, magnetar: FALLOFF_MARKSMAN,
@@ -1508,7 +1522,7 @@ const WEAPON_COSTS = {
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
-  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480,
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, phase_rifle: 550,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
@@ -2517,7 +2531,7 @@ const DOUBLE_JUMP_IDS = new Set(['fists','air_rifle','dart_gun']);
 //   • guns that genuinely can't aim, or are one of a kind: the paintball marker
 //     (that hopper sits right where the sights should be) and the revolver
 // Ordinary guns lost theirs. They can aim; that IS their thing.
-const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom', 'javelin_launcher', 'railgun', 'hellfire']);
+const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom', 'javelin_launcher', 'railgun', 'hellfire', 'phase_rifle', 'chrono_pistol']);
 function hasAbility(w) {
   if (!w) return false;
   // A marketplace ability counts even on a gun that has none of its own — that
@@ -28138,29 +28152,100 @@ function buildSnowGlobe() {
   return _skFinish(g, GZ - 0.085, 0, 0.014);
 }
 
-// 🧊 P90 -> Rubik's Cube. Nine of the cubies are the top layer, and it really turns.
+// 🧊 P90 -> Rubik's Cube. 27 real cubies. Every shot twists one random layer a quarter turn (any of the three axes, either way),
+// so it scrambles as you shoot; a reload turns the top layer a full circle. It has never once been solved.
 function buildRubiksCube() {
   const g = new THREE.Group();
   const black = _skM(0x111214, 60, 0x555a66), dark = _skM(0x23252a, 70, 0x667088);
   const cols = { px: 0xd8281e, nx: 0xf27a12, py: 0xf4f4f0, ny: 0xf2d21a, pz: 0x1f9a3a, nz: 0x1f5fcf };
   const U = 0.034, CZ = -0.062;
+  const stick = {};   // one material per colour, not one per sticker
+  const cubies = [];
   const cubie = (ix, iy, iz) => {
-    const x = ix * U, y = iy * U, z = CZ + iz * U;
-    gpBox(g, black, 0.0335, 0.0335, 0.0335, x, y, z);
-    const st = (c, w, h, d, ox, oy, oz) => gpBox(g, _skM(c, 120, 0xffffff), w, h, d, x + ox, y + oy, z + oz);
+    const cg = new THREE.Group(); cg.position.set(ix * U, iy * U, CZ + iz * U); g.add(cg);
+    gpBox(cg, black, 0.0335, 0.0335, 0.0335, 0, 0, 0);
+    const st = (c, w, h, d, ox, oy, oz) => gpBox(cg, stick[c] || (stick[c] = _skM(c, 120, 0xffffff)), w, h, d, ox, oy, oz);
     if (ix === 1)  st(cols.px, 0.0016, 0.027, 0.027, 0.0170, 0, 0);
     if (ix === -1) st(cols.nx, 0.0016, 0.027, 0.027, -0.0170, 0, 0);
     if (iy === 1)  st(cols.py, 0.027, 0.0016, 0.027, 0, 0.0170, 0);
     if (iy === -1) st(cols.ny, 0.027, 0.0016, 0.027, 0, -0.0170, 0);
     if (iz === 1)  st(cols.pz, 0.027, 0.027, 0.0016, 0, 0, 0.0170);
     if (iz === -1) st(cols.nz, 0.027, 0.027, 0.0016, 0, 0, -0.0170);
+    // where it sits when the cube is solved: the entrance and every redraw come back to this
+    cg.userData.eqHome = { p: cg.position.clone(), q: cg.quaternion.clone(), s: cg.scale.clone() };
+    cubies.push({ cg, home: [ix, iy, iz], at: [ix, iy, iz] });
   };
-  for (let ix = -1; ix <= 1; ix++) for (let iz = -1; iz <= 1; iz++) for (let iy = -1; iy <= 0; iy++) cubie(ix, iy, iz);
-  gpPart(g, 'main', () => { for (let ix = -1; ix <= 1; ix++) for (let iz = -1; iz <= 1; iz++) cubie(ix, 1, iz); }, { x: 0, y: U, z: CZ });
+  for (let ix = -1; ix <= 1; ix++) for (let iy = -1; iy <= 1; iy++) for (let iz = -1; iz <= 1; iz++) cubie(ix, iy, iz);
+  gpPart(g, 'main', () => {}, { x: 0, y: U, z: CZ });   // the reload drives this one's turn; _tick applies it to whatever is on top
   gpCyl(g, black, 0.0075, 0.0075, 0.008, 10, 0, 0.0, CZ - 0.058);        // the muzzle, in the middle of the front face
   gpBox(g, dark, 0.036, 0.032, 0.056, 0, -0.012, 0.012);                 // the handle block behind it
   _skGrip(g, dark, -0.010);
-  return _skFinish(g, CZ - 0.078, 0, 0.010);
+  _skFinish(g, CZ - 0.078, 0, 0.010);
+
+  const C = new THREE.Vector3(0, 0, CZ);
+  const mkPivot = () => { const pv = new THREE.Group(); pv.position.copy(C); pv.userData.eqFx = true; g.add(pv); return pv; };
+  const twistPv = mkPivot(), reloadPv = mkPivot();
+  let tw = null, reloadOn = false, wasFired = false, wasAsm = false;
+  const rot90 = (v, axis, th) => {            // a grid position turned a quarter about an axis, as three.js turns it
+    const c = Math.round(Math.cos(th)), sn = Math.round(Math.sin(th)); let [x, y, z] = v;
+    if (axis === 'x') [y, z] = [y * c - z * sn, y * sn + z * c];
+    else if (axis === 'y') [x, z] = [x * c + z * sn, -x * sn + z * c];
+    else [x, y] = [x * c - y * sn, x * sn + y * c];
+    return [Math.round(x), Math.round(y), Math.round(z)];
+  };
+  const finishTwist = () => {
+    if (!tw) return;
+    const th = tw.dir * Math.PI / 2, q = new THREE.Quaternion();
+    q.setFromAxisAngle(new THREE.Vector3(tw.axis === 'x' ? 1 : 0, tw.axis === 'y' ? 1 : 0, tw.axis === 'z' ? 1 : 0), th);
+    for (const c of tw.items) {
+      c.cg.position.applyQuaternion(q).add(C); c.cg.quaternion.premultiply(q);
+      g.add(c.cg); c.at = rot90(c.at, tw.axis, th);
+      c.cg.position.set(c.at[0] * U, c.at[1] * U, CZ + c.at[2] * U);   // snap to the grid so quarter turns never drift
+    }
+    twistPv.rotation.set(0, 0, 0); tw = null;
+  };
+  const startTwist = () => {
+    finishTwist();
+    const axis = 'xyz'[Math.floor(Math.random() * 3)], slice = Math.floor(Math.random() * 3) - 1, dir = Math.random() < 0.5 ? -1 : 1;
+    const items = cubies.filter(c => c.at['xyz'.indexOf(axis)] === slice);
+    for (const c of items) { c.cg.position.sub(C); twistPv.add(c.cg); }
+    tw = { axis, dir, t: 0, items };
+  };
+  const endReload = () => {
+    if (!reloadOn) return;
+    for (const c of [...reloadPv.children]) { c.position.add(C); g.add(c); }
+    reloadPv.rotation.set(0, 0, 0); reloadOn = false;
+    if (g._parts && g._parts.main) g._parts.main.rotation.set(0, 0, 0);
+  };
+  const solve = () => {
+    finishTwist(); endReload();
+    for (const c of cubies) { const h = c.cg.userData.eqHome; c.cg.position.copy(h.p); c.cg.quaternion.copy(h.q); g.add(c.cg); c.at = c.home.slice(); }
+  };
+  g._calm = () => { finishTwist(); endReload(); };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { if (!wasAsm) solve(); wasAsm = true; return; }
+    wasAsm = false;
+    if (reloading) {                                         // the reload turns the top layer a full circle, whichever cubies are up there
+      if (!reloadOn) {
+        finishTwist();
+        for (const c of cubies) if (c.at[1] === 1) { c.cg.position.sub(C); reloadPv.add(c.cg); }
+        reloadOn = true;
+      }
+      reloadPv.rotation.y = g._parts.main.rotation.y;
+      return;
+    }
+    endReload();
+    const fired = !!(g._flash && g._flash.visible);
+    if (fired && !wasFired) startTwist();                    // one shot, one random twist
+    wasFired = fired;
+    if (tw) {
+      tw.t = Math.min(1, tw.t + dt / 0.09);
+      const k = tw.t * tw.t * (3 - 2 * tw.t);
+      twistPv.rotation[tw.axis] = tw.dir * Math.PI / 2 * k;
+      if (tw.t >= 1) finishTwist();
+    }
+  };
+  return g;
 }
 
 // 🎼 Railgun -> Tuning Fork. It hums all the time; a shot sets it ringing.
@@ -28402,6 +28487,9 @@ function buildMousetrap() {
   gpPart(g, 'main', () => {                                              // the bar, hinged at the back
     ham = new THREE.Group(); ham.position.set(0, 0.012, 0.040); ham.rotation.x = REST; g.add(ham);
     [-1, 1].forEach(sd => gpCyl(ham, steel, 0.003, 0.003, 0.200, 6, sd * 0.022, 0, -0.100));
+    // where it sits when the cube is solved: the entrance and every redraw come back to this
+    cg.userData.eqHome = { p: cg.position.clone(), q: cg.quaternion.clone(), s: cg.scale.clone() };
+    cubies.push({ cg, home: [ix, iy, iz], at: [ix, iy, iz] });
     gpCyl(ham, steel, 0.003, 0.003, 0.048, 6, 0, 0, -0.200, 0, Math.PI / 2);
     gpCyl(ham, steel, 0.003, 0.003, 0.048, 6, 0, 0, 0, 0, Math.PI / 2);
   }, { x: 0, y: 0.012, z: 0.040 });
@@ -32584,7 +32672,80 @@ const weaponModels = [
   buildAkimbo(),  // akimbo
   buildHellfire(),  // hellfire
   buildOmegaPistol(),  // omega_pistol
+  buildPhaseRifle(),  // phase_rifle
+  buildChronoPistol(),  // chrono_pistol
 ];
+function buildPhaseRifle() {
+  // 🌀 Phase Rifle. A pearl-and-graphite carbine with three glowing phase coils round the barrel. The coils hum cyan; when you
+  // press E they shift to violet and pulse, and every round goes through the walls.
+  const g = new THREE.Group();
+  const hull = new THREE.MeshPhongMaterial({ color: 0x4a5568, shininess: 120, specular: 0x9fb0c8 });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x2c323c, shininess: 60, specular: 0x4a5668 });
+  const pearl = new THREE.MeshPhongMaterial({ color: 0xdfe8ef, shininess: 160, specular: 0xffffff });
+  const glow = new THREE.MeshBasicMaterial({ color: 0x66f0ff });
+  const glowSoft = new THREE.MeshBasicMaterial({ color: 0x66f0ff, transparent: true, opacity: 0.55, depthWrite: false });
+  gpBox(g, hull, 0.050, 0.068, 0.300, 0, 0, -0.010);                  // receiver
+  gpBox(g, pearl, 0.052, 0.018, 0.200, 0, 0.037, -0.035);              // the pearl top plate
+  gpBox(g, dark, 0.034, 0.040, 0.230, 0, 0.004, -0.270);               // barrel shroud
+  gpCyl(g, dark, 0.011, 0.011, 0.130, 12, 0, 0.004, -0.430);           // the barrel inside the coils
+  const rings = [-0.250, -0.300, -0.350, -0.400].map(z => {            // the phase coils
+    const m = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.0045, 8, 20), glow); m.position.set(0, 0.004, z); g.add(m); return m;
+  });
+  gpCyl(g, glow, 0.0065, 0.0065, 0.016, 10, 0, 0.004, -0.500);         // the emitter tip
+  gpBox(g, hull, 0.040, 0.066, 0.150, 0, -0.012, 0.215);               // stock
+  gpBox(g, pearl, 0.042, 0.016, 0.150, 0, 0.032, 0.215);
+  gpBox(g, dark, 0.030, 0.090, 0.040, 0, -0.080, 0.075, 0.25);         // grip
+  gpPart(g, 'magazine', () => {                                         // a glowing cell for a magazine
+    gpBox(g, dark, 0.036, 0.100, 0.054, 0, -0.082, -0.030);
+    gpBox(g, glowSoft, 0.026, 0.078, 0.032, 0, -0.082, -0.030);
+  });
+  gpBox(g, dark, 0.030, 0.012, 0.050, 0, 0.046, -0.040);                // a plain sight (this build has no reflex-sight helper)
+  gpBox(g, glowSoft, 0.020, 0.018, 0.002, 0, 0.058, -0.064);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.004, -0.520); g.add(flash);
+  g._flash = flash; g._kickZ = 0.022; g._greebled = true; g._handDetailed = true;
+  g._tick = (dt, now) => {
+    const on = !!abilityBuff && abilityBuff.weaponId === 'phase_rifle' && Date.now() < abilityBuff.endTime;
+    const c = on ? 0xc47bff : 0x66f0ff;
+    glow.color.setHex(c); glowSoft.color.setHex(c);
+    rings.forEach((r, i) => r.scale.setScalar(1 + (on ? 0.18 : 0.06) * Math.sin(now * (on ? 14 : 4) + i * 1.3)));
+  };
+  g.position.set(0.11, -0.10, -0.24); return g;
+}
+function buildChronoPistol() {
+  // ⏳ Chrono Pistol (admin). A graphite sidearm with a brass-ringed clock set into the slide, a glass-blue seam down its side
+  // and a hand that ticks round; press E and the hand whirls backwards while you rewind.
+  const g = new THREE.Group();
+  const slide = new THREE.MeshPhongMaterial({ color: 0x4a515f, shininess: 140, specular: 0xa8b4c8 });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x2e323b, shininess: 50, specular: 0x4a5058 });
+  const gold = new THREE.MeshPhongMaterial({ color: 0xd8b048, shininess: 180, specular: 0xfff0b0 });
+  const face = new THREE.MeshPhongMaterial({ color: 0xf4f1e6, shininess: 80, specular: 0xffffff });
+  const ink = new THREE.MeshBasicMaterial({ color: 0x15171a });
+  const glow = new THREE.MeshBasicMaterial({ color: 0x7af4ff });
+  gpBox(g, slide, 0.034, 0.040, 0.200, 0, 0.012, -0.050);              // slide
+  gpBox(g, dark, 0.030, 0.034, 0.150, 0, -0.016, -0.040);              // frame
+  for (const s of [-1, 1]) gpBox(g, glow, 0.002, 0.004, 0.150, s * 0.0175, 0.012, -0.060);   // the glass-blue seam
+  gpCyl(g, gold, 0.0085, 0.0085, 0.040, 12, 0, 0.012, -0.160);         // the brass muzzle ring
+  gpBox(g, dark, 0.030, 0.085, 0.040, 0, -0.065, 0.040, 0.22);         // grip
+  gpPart(g, 'magazine', () => gpBox(g, dark, 0.026, 0.060, 0.034, 0, -0.092, 0.030));
+  const dial = new THREE.Mesh(new THREE.CylinderGeometry(0.0185, 0.0185, 0.004, 22), face); dial.position.set(0, 0.0325, 0.012); g.add(dial);
+  const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.0195, 0.0027, 8, 22), gold); bezel.rotation.x = Math.PI / 2; bezel.position.set(0, 0.0335, 0.012); g.add(bezel);
+  for (let i = 0; i < 12; i++) {                                         // twelve ticks round the face
+    const a = i / 12 * Math.PI * 2, m = new THREE.Mesh(new THREE.BoxGeometry(0.0016, 0.0008, i % 3 === 0 ? 0.0050 : 0.0030), ink);
+    m.position.set(Math.sin(a) * 0.0148, 0.0348, 0.012 - Math.cos(a) * 0.0148); m.rotation.y = a; g.add(m);
+  }
+  const hand = new THREE.Group(); hand.position.set(0, 0.0352, 0.012); hand.userData.eqFx = true; g.add(hand);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.0022, 0.0010, 0.0150), glow); arm.position.z = -0.0065; hand.add(arm);
+  const pin = new THREE.Mesh(new THREE.SphereGeometry(0.0020, 6, 5), gold); hand.add(pin);
+  gpBox(g, dark, 0.006, 0.010, 0.010, 0, 0.037, -0.140);               // front sight
+  gpBox(g, dark, 0.020, 0.008, 0.008, 0, 0.034, 0.045);                // rear sight
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.200); g.add(flash);
+  g._flash = flash; g._kickZ = 0.030; g._greebled = true; g._handDetailed = true;
+  g._tick = (dt, now) => {
+    const rewinding = Date.now() - (abilityCDs.chrono_pistol || 0) < 900;
+    hand.rotation.y = rewinding ? hand.rotation.y + dt * 40 : -Math.floor(now * 2) * (Math.PI * 2 / 60);   // forward tick, whirling back in a rewind
+  };
+  g.position.set(0.11, -0.10, -0.24); return g;
+}
 function buildOmegaPistol() {
   const g=new THREE.Group(),dark=GUN_MATS.inner(),chrome=GUN_MATS.bright();
   const red=new THREE.MeshBasicMaterial({color:0xff3344});
@@ -42248,6 +42409,8 @@ function startSupportEquipAnim(idx, ms) {
     const model = supportModels[idx], item = SUPPORT_ITEMS[idx];
     if (!model || !item) return;
     if (model._heldItem) model._heldItem.visible = true;
+    const wantSk = equippedSupportModelSkins[item.id], sk = wantSk && SUPPORT_MODEL_SKINS.find(s => s.id === wantSk && s.support === item.id);
+    if (sk && sk.equip && sk._model === model) { _beginEquip(model, sk, false, true); return; }     // a utility skin's own entrance
     if (model._supportEquip === 'donutbuild') {
       // The stock grenade is a donut too, but its entrance must fit the utility draw.
       const duration = ms == null ? equipMsFor(item, 'support') : Math.max(0, Math.min(ms, equipMsFor(item, 'support')));
@@ -46086,7 +46249,11 @@ function activateAbility() {
       speedMult:  ab.speedMult  ?? 1,
       spinBoost:  ab.spinBoost  || false,
       ...(ab.shotsFromMag ? { shotsLeft: pool.ammo } : {}),
+      ...(ab.weaponAbId ? { weaponAbId: ab.weaponAbId } : {}),
+      ...(ab.bulletColor != null ? { bulletColor: ab.bulletColor } : {}),
+      ...(ab.vision ? { vision: true } : {}),
     };
+    if (ab.vision) { flashScreen('rgba(196,123,255,0.16)', 320); playSoundEvent('blink', { volume: 0.55 }); }
     if (ab.spinBoost && weaponModels[currentWeaponIdx]?._barrelCluster)
       weaponModels[currentWeaponIdx]._spinRate = 22;
     flashAbilityName(ab.name);
@@ -46104,6 +46271,9 @@ function activateAbility() {
       explodeOnHit: ab.explodeOnHit || false,
     };
     flashAbilityName(ab.name);
+  }
+  else if (ab.type === 'rewind') {
+    if (doRewind(w, ab)) flashAbilityName(ab.name);
   }
   else if (ab.type === 'fanfire') {
     pendingFanFire = { count: ab.count, total: ab.count, delay: ab.delay || 60, timer: 0, w, spread: ab.fanSpread || 0 };
@@ -46976,6 +47146,7 @@ function updatePendingFanFire(dt) {
 }
 
 function updateAbilityBuff(dt) {
+  _rewindSample();
   if (!abilityBuff) return;
   const now = Date.now();
   if (now > abilityBuff.endTime && abilityBuff.shotsLeft === undefined) {
@@ -47354,7 +47525,7 @@ function tryShoot() {
       }
       const bColor = wStats.randomBulletColor
         ? PAINTBALL_COLORS[Math.floor(Math.random() * PAINTBALL_COLORS.length)]
-        : (forcedShot?.bulletColor ?? wStats.bulletColor);
+        : (forcedShot?.bulletColor ?? ab?.bulletColor ?? wStats.bulletColor);
       spawnLocalBullet(muzzleWorld, spreadDir, `local_${myId}_${now}_${p}`, true, shotSpeed, bColor, forcedShot?.bulletSize ?? wStats.bulletSize, shotWeaponId);
     }
   }
@@ -50119,7 +50290,7 @@ const MODEL_SKINS = [
     blurb: 'A small village, permanently in the middle of a blizzard. Turn it upside down to reload.' },
   { id: 'p90_rubiks_cube', weapon: 'p90', name: "Rubik's Cube", rarity: 'rare',
     sw: ['#d8281e', '#1f5fcf'], build: buildRubiksCube,
-    blurb: 'Every reload is a clean quarter-turn of the top layer. It has never once been solved.' },
+    blurb: 'Every shot twists a random layer of the cube, every reload spins the top one right round. It has never once been solved.' },
   { id: 'railgun_tuning_fork', weapon: 'railgun', name: 'Tuning Fork', rarity: 'rare',
     sw: ['#c4ccd6', '#66e8ff'], build: buildTuningFork,
     blurb: 'A perfect A, held very hard. Every shot sets it ringing.' },
@@ -50314,6 +50485,8 @@ function refreshLegendSkins() {
       if (MODEL_SKINS.some(m => m.id === sid && (m.rarity === 'legend' || GATED_MODEL_SKIN_IDS.has(m.id)))) applyModelSkin(wid);
     for (const [bid, sid] of Object.entries(equippedMeleeModelSkins))
       if (MELEE_MODEL_SKINS.some(m => m.id === sid && (m.rarity === 'legend' || GATED_MELEE_MODEL_SKIN_IDS.has(m.id)))) applyMeleeModelSkin(bid);
+    for (const [bid, sid] of Object.entries(equippedSupportModelSkins))
+      if (GEN2_SUPPORT_MODEL_SKIN_IDS.has(sid)) applySupportModelSkin(bid);
   } catch (e) {}
 }
 const MODEL_SKINS_BY_WEAPON = {};
@@ -50361,10 +50534,12 @@ const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
   'katana_donut', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity', 'lightsabre_singularity',
   'katana_laser', 'katana_sakura', 'katana_thunder', 'combat_axe_frost', 'shock_baton_thunder',
   'spear_thunder', 'knife_balloon', 'bat_inflatable', 'frying_pan_pizza_cutter',
-  'sabre_balloon',
+  'sabre_balloon', 'katana_tidal_fang',
 ]);
+// 🎬 Utility skins that make an entrance come out of Gen 2 too (no skin is free).
+const GEN2_SUPPORT_MODEL_SKIN_IDS = new Set(['frag_stopwatch']);
 const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS,...PVP_SHOP_CATALOG.exclusiveSkins]);
-const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS]);
+const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
 for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
   const ms = MODEL_SKINS.find(m => m.id === id);
   if (ms && !GEN1_SKIN_BY_ID[id]) { GEN1_SKIN_DEFS.push(ms); GEN1_SKIN_BY_ID[id] = ms; }
@@ -51841,6 +52016,68 @@ function buildThunderSpear() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+function buildTidalFang() {
+  // 🌊 Katana -> Tidal Fang. A captured wave: the blade is blue water with a white foam spine, a wave curling over it near
+  // the tip and the tip hooked like a fang. Foam crawls along the edge and bubbles rise inside it. Drawn, the water
+  // rises up in the blade.
+  const g = new THREE.Group();
+  const O = [0, 0.022, -0.020];
+  const navy = new THREE.MeshPhongMaterial({ color: 0x12283c, shininess: 60, specular: 0x5a7a96 });
+  const pearl = new THREE.MeshPhongMaterial({ color: 0xeaf6f4, shininess: 200, specular: 0xffffff });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc89a48, shininess: 160, specular: 0xfff0b0 });
+  const water = new THREE.MeshPhongMaterial({ color: 0x2aa8d8, emissive: 0x0a5a8a, emissiveIntensity: 0.55, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.82 });
+  const deep = new THREE.MeshPhongMaterial({ color: 0x1470b0, emissive: 0x06304a, emissiveIntensity: 0.5, shininess: 200, specular: 0xffffff, transparent: true, opacity: 0.88 });
+  const foamM = new THREE.MeshBasicMaterial({ color: 0xf4ffff });
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x + O[0], y + O[1], z + O[2]); m.rotation.set(rx, ry, 0); g.add(m); return m;
+  };
+  add(new THREE.CylinderGeometry(0.012, 0.012, 0.150, 12), navy, 0, 0, 0.078, Math.PI / 2);        // the hilt
+  for (let i = 0; i < 5; i++) add(new THREE.TorusGeometry(0.0125, 0.0016, 6, 16), brass, 0, 0, 0.030 + i * 0.026);   // its brass bands
+  add(new THREE.SphereGeometry(0.014, 12, 10), pearl, 0, 0, 0.160);                               // the pearl pommel
+  add(new THREE.CylinderGeometry(0.030, 0.030, 0.006, 20), pearl, 0, 0, 0, Math.PI / 2);          // the guard: a shell
+  for (let i = 0; i < 8; i++) {                                                                    // with a scalloped rim
+    const a = i / 8 * Math.PI * 2;
+    add(new THREE.SphereGeometry(0.0048, 8, 6), brass, Math.cos(a) * 0.030, Math.sin(a) * 0.030, 0);
+  }
+  add(new THREE.BoxGeometry(0.010, 0.022, 0.014), brass, 0, 0, -0.011);                           // the collar
+  g._water = add(new THREE.BoxGeometry(0.0075, 0.032, 0.290), water, 0, 0, -0.160);               // the blade: water. It rises on the draw.
+  add(new THREE.BoxGeometry(0.0090, 0.011, 0.290), deep, 0, -0.011, -0.160);                      // the deep, along the edge
+  add(new THREE.ConeGeometry(0.0160, 0.080, 4), water, 0, 0.0, -0.345, -Math.PI / 2 - 0.12);     // the fang: the tip, hooked down
+  add(new THREE.TorusGeometry(0.030, 0.0088, 8, 16, Math.PI * 0.9), water, 0, 0.016, -0.215, 0, -Math.PI / 2);   // the wave curling over
+  add(new THREE.SphereGeometry(0.0085, 8, 6), foamM, 0, 0.016 + 0.0093, -0.215 - 0.0285);                          // its foam lip
+  add(new THREE.TorusGeometry(0.018, 0.0066, 8, 12, Math.PI * 0.9), water, 0, 0.016, -0.100, 0, -Math.PI / 2);   // a smaller one behind
+  add(new THREE.SphereGeometry(0.0062, 8, 6), foamM, 0, 0.016 + 0.0056, -0.100 - 0.0171);
+  add(new THREE.BoxGeometry(0.0046, 0.0050, 0.290), foamM, 0, 0.0175, -0.160);                    // the foam along the spine
+  const beads = [], N = 9;                                                                          // foam crawling along it
+  for (let i = 0; i < N; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.0058, 8, 6), foamM);
+    m.userData.eqFx = true; g.add(m); beads.push(m);
+  }
+  const bubbleM = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false });
+  const bubbles = [];
+  for (let i = 0; i < 6; i++) {                                                                     // and bubbles rising in the water
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.0026 + (i % 3) * 0.0006, 6, 5), bubbleM);
+    m.userData.eqFx = true; g.add(m); bubbles.push(m);
+  }
+  g._tick = (dt, now, assembling) => {
+    for (const m of beads) m.visible = !assembling;
+    for (const m of bubbles) m.visible = !assembling;
+    if (assembling) return;
+    beads.forEach((m, i) => {
+      const u = (now * 0.24 + i / N) % 1, edge = i % 2 === 0;
+      m.position.set(O[0] + Math.sin(now * 5 + i) * 0.003, O[1] + (edge ? -0.0185 : 0.0195) + Math.sin(now * 7 + i * 2) * 0.0015, O[2] - 0.02 - u * 0.30);
+      m.scale.setScalar(0.7 + 0.5 * Math.sin(u * Math.PI));                                          // swell mid-blade, vanish at the ends
+    });
+    bubbles.forEach((m, i) => {
+      const u = (now * 0.35 + i * 0.17) % 1;
+      m.position.set(O[0] + Math.sin(now * 3 + i * 1.7) * 0.0025, O[1] - 0.012 + u * 0.026, O[2] - 0.05 - i * 0.04);
+      m.scale.setScalar(Math.sin(u * Math.PI) + 0.05);
+    });
+  };
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 function buildBalloonSword() {
   // 🎈 Sabre -> Balloon Sword. Twisted from long red balloons, a yellow loop for
   // a guard. Drawn, it is blown up from the hilt to the tip, squeaking; held,
@@ -52091,6 +52328,10 @@ const MELEE_MODEL_SKINS = [
     sw: ['#2a2e36', '#6ad0ff'], build: buildThunderSpear,
     blurb: 'A long storm blade that arrives on a strike and crackles while held.',
     equip: 'strike', equipMs: 800, equipSfx: ['thunder', null] },
+  { id: 'katana_tidal_fang', melee: 'katana', name: 'Tidal Fang', rarity: 'rare',
+    sw: ['#2aa8d8', '#f4ffff'], build: buildTidalFang,
+    blurb: 'A captured wave with a hooked tip. Foam crawls the edge and bubbles rise inside; drawn, the water rises up in the blade.',
+    equip: 'fill', equipMs: 1000, equipSfx: ['pour', 'bloop'] },
   { id: 'knife_balloon', melee: 'knife', name: 'Balloon Knife', rarity: 'good',
     sw: ['#ff3a4a', '#ffd23a'], build: buildBalloonSword,
     blurb: 'Inflates into a squeaky little blade and wobbles like it knows.',
@@ -52226,6 +52467,48 @@ function buildDiscoBall() {
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.0022, 6, 12), new THREE.MeshPhongMaterial({ color: 0xb8bec6, shininess: 80 })); ring.position.y = 0.072; g.add(ring);
   g.position.set(0.10, -0.12, -0.20); return g;
 }
+function buildStopwatch() {
+  // ⏱️ Frag grenade -> Stopwatch. A chrome sports stopwatch in a grenade's olive rubber, a pull ring on the crown, a red second hand
+  // that ticks round the face the whole time you hold it. Drawn, it is wound and clicked on piece by piece.
+  const g = new THREE.Group();
+  const chrome = new THREE.MeshPhongMaterial({ color: 0xcfd6de, shininess: 220, specular: 0xffffff });
+  const olive = new THREE.MeshPhongMaterial({ color: 0x4d6a30, shininess: 40, specular: 0x7a9a58 });
+  const white = new THREE.MeshPhongMaterial({ color: 0xf6f3ea, shininess: 90, specular: 0xffffff });
+  const ink = new THREE.MeshBasicMaterial({ color: 0x15171a });
+  const red = new THREE.MeshBasicMaterial({ color: 0xe0281e });
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m;
+  };
+  add(new THREE.CylinderGeometry(0.047, 0.047, 0.024, 28), chrome, 0, 0, 0, Math.PI / 2);          // the case
+  add(new THREE.TorusGeometry(0.048, 0.0045, 8, 28), olive, 0, 0, 0);                                // the rubber band round it
+  add(new THREE.TorusGeometry(0.045, 0.0042, 8, 28), chrome, 0, 0, 0.011);                           // the bezel
+  add(new THREE.CylinderGeometry(0.041, 0.041, 0.002, 28), white, 0, 0, 0.0125, Math.PI / 2);       // the face
+  for (let i = 0; i < 12; i++) {                                                                      // the ticks
+    const a = i / 12 * Math.PI * 2, big = i % 3 === 0, r = big ? 0.0335 : 0.0355;
+    add(new THREE.BoxGeometry(big ? 0.0034 : 0.0022, big ? 0.0085 : 0.0050, 0.0008), ink, Math.sin(a) * r, Math.cos(a) * r, 0.0138, 0, 0, -a);
+  }
+  add(new THREE.TorusGeometry(0.0115, 0.0008, 6, 20), ink, 0, -0.0145, 0.0138);                      // the little sub-dial
+  add(new THREE.BoxGeometry(0.0020, 0.0095, 0.0008), ink, 0, -0.0145 + 0.0045, 0.0140);
+  add(new THREE.CylinderGeometry(0.0085, 0.0085, 0.018, 12), chrome, 0, 0.0555, 0);                  // the crown
+  add(new THREE.CylinderGeometry(0.0115, 0.0115, 0.008, 12), olive, 0, 0.0690, 0);                   // the button on top
+  add(new THREE.TorusGeometry(0.0145, 0.0024, 6, 14), chrome, 0, 0.0850, 0, 0, Math.PI / 2);         // the pull ring
+  add(new THREE.CylinderGeometry(0.0052, 0.0052, 0.015, 10), chrome, 0.0335, 0.0335, 0, 0, 0, -Math.PI / 4);   // the start button
+  add(new THREE.CylinderGeometry(0.0052, 0.0052, 0.015, 10), chrome, -0.0335, 0.0335, 0, 0, 0, Math.PI / 4);   // the lap button
+  // the second hand: a pivot on the face, red, with a short tail; ticks round and never stops
+  const hand = new THREE.Group(); hand.position.set(0, 0, 0.0148); hand.userData.eqFx = true; g.add(hand);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.0024, 0.0355, 0.0010), red); arm.position.y = 0.0145; hand.add(arm);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.0034, 0.010, 0.0010), red); tail.position.y = -0.0065; hand.add(tail);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.0036, 8, 6), red); hand.add(cap);
+  g._calm = () => { hand.rotation.z = 0; };
+  g._tick = (dt, now, assembling) => {
+    hand.visible = !assembling;
+    if (assembling) return;
+    hand.rotation.z = -Math.floor(now * 8) * (Math.PI * 2 / 60);                                      // eight little clicks a second
+  };
+  g.rotation.set(-0.45, -0.30, 0.0);                                                                 // tipped up so the face reads
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
 function buildTeaKettle() {
   const g = new THREE.Group();
   const steel = new THREE.MeshPhongMaterial({ color: 0xb9c2cc, shininess: 90, specular: 0xffffff });
@@ -52316,6 +52599,9 @@ const SUPPORT_MODEL_SKINS = [
     blurb: 'Army slang, taken literally. The pin is real.' },
   { id: 'frag_disco',      support: 'frag',        name: 'Disco Ball',       rarity: 'good', sw: ['#dfe7f0', '#ff4fd8'], build: buildDiscoBall,
     blurb: 'Everybody dances. One of them leaves early.' },
+  { id: 'frag_stopwatch', support: 'frag', name: 'Stopwatch', rarity: 'rare', sw: ['#cfd6de', '#e0281e'], build: buildStopwatch,
+    blurb: 'A sports stopwatch in grenade rubber. The red hand ticks round to nothing in particular. It is wound and clicked on piece by piece when you draw it.',
+    equip: 'windup', equipMs: 900, equipSfx: ['windup', 'ding'] },
   { id: 'smoke_kettle',    support: 'smoke',       name: 'Tea Kettle',       rarity: 'good', sw: ['#b9c2cc', '#2a2a2e'], build: buildTeaKettle,
     blurb: 'It was always going to be a bit of a cloud.' },
   { id: 'medkit_pizza',    support: 'medkit',      name: 'Pizza Box',        rarity: 'good', sw: ['#c9a268', '#c0342a'], build: buildPizzaBox,
@@ -52329,6 +52615,7 @@ const SUPPORT_MODEL_SKINS = [
 ];
 const SUPPORT_MODEL_SKINS_BY_BASE = {};
 for (const ms of SUPPORT_MODEL_SKINS) (SUPPORT_MODEL_SKINS_BY_BASE[ms.support] ||= []).push(ms);
+for (const ms of SUPPORT_MODEL_SKINS) if (GEN2_SUPPORT_MODEL_SKIN_IDS.has(ms.id)) { GEN2_SKIN_DEFS.push(ms); GEN2_SKIN_BY_ID[ms.id] = ms; }   // utilities after melee in the case's reel and counter
 let equippedSupportModelSkins = (() => {
   try { return JSON.parse(window.PVE_STORAGE.getItem('pvp_support_model_skins')) || {}; } catch (e) { return {}; }
 })();
@@ -52338,7 +52625,7 @@ function applySupportModelSkin(baseId) {
   if (idx < 0 || !supportModels[idx]) return;
   if (!(idx in _baseSupportModels)) _baseSupportModels[idx] = supportModels[idx];
   const want = equippedSupportModelSkins[baseId];
-  const skin = SUPPORT_MODEL_SKINS.find(s => s.id === want && s.support === baseId);
+  const skin = SUPPORT_MODEL_SKINS.find(s => s.id === want && s.support === baseId && !isCaseSkinLocked(s));
   let next;
   if (!skin) next = _baseSupportModels[idx];
   else {
@@ -54718,12 +55005,17 @@ const SKIN_FX = {
     // the off hand turns the top layer a quarter at a time: four clicks, and it is back where it began
     reload: _fxR([K(.08,{py:.05,rx:.15,rz:-.20}),
       K(.20,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,hr:-.3}),
-      K(.32,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:1.5708}),
-      K(.44,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:3.1416}),
-      K(.56,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:4.7124}),
-      K(.68,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:6.2832}),
+      // each quarter is a held beat then a quick snap, so it clicks round instead of spinning like a fan
+      K(.29,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:0}),
+      K(.33,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:1.5708}),
+      K(.41,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:1.5708}),
+      K(.45,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:3.1416}),
+      K(.53,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:3.1416}),
+      K(.57,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:4.7124}),
+      K(.65,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:4.7124}),
+      K(.69,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:6.2832}),
       K(.82,{py:.04,rx:.10,rz:-.10,ary:6.2832}), K(.9995,{py:.0,ary:6.2832})],
-      null, [[.32,'click'],[.44,'click'],[.56,'click'],[.68,'click']], 'ding') },
+      null, [[.33,'click'],[.45,'click'],[.57,'click'],[.69,'click']], 'ding') },
   railgun_tuning_fork: { sound: _fxS('ring', .32, .90, 1046, 1046),
     equip: 'spin', equipMs: 900, equipSfx: ['whoosh', 'ding'],
     // struck on the palm and held to the ear, where a silver coin flips into the V
@@ -56171,7 +56463,7 @@ function getClientWeaponDamage(weaponId) {
   const s = SUPPORT_ITEMS.find(x => x.id === weaponId && x.damage);
   if (s) return s.damage;
   const ab = { sg8_wave:20, crossbow_ab:220, crossbow_c1:140, sg100_ab:140, lever_ab:150,
-               railgun_ab:330, boombow_ab:83, boombow_c1:53, cycler_ab:32, hand_cannon_ab:175 };
+               railgun_ab:330, boombow_ab:83, boombow_c1:53, cycler_ab:32, hand_cannon_ab:175, phase_rifle_ph:22 };
   if (ab[weaponId] != null) return ab[weaponId];
   // Fall through to the big table the bot->player path uses, so synthetic ids
   // like '<weapon>_splash' resolve in BOTH directions. Without this every splash
@@ -56190,7 +56482,7 @@ function weaponPiercesDefenses(weaponId) {
 }
 
 function gatecrasherPiercesWalls(id) {
-  return id === 'gatecrasher' || id === 'gatecrasher_slug' || id === 'gatecrasher_beam';
+  return id === 'gatecrasher' || id === 'gatecrasher_slug' || id === 'gatecrasher_beam' || id === 'phase_rifle_ph';   // (the Phase Rifle's rounds while Phase Shift is up)
 }
 function projectileWallDamageScale(b, hitT = 1) {
   return gatecrasherPiercesWalls(b.weaponId) && (b.wallPenetrated || hitT >= b._wallEntryT) ? .5 : 1;
@@ -57634,6 +57926,54 @@ function activateUAV(item) {
     document.body.appendChild(mm);
   }
   mm.style.display = 'block';
+}
+// 🌀 Phase Shift's see-through-cover: while the buff has `vision`, every enemy gets a cyan silhouette that draws over walls.
+const _phaseGhosts = {};
+function updatePhaseVision(dt) {
+  const on = !!abilityBuff && abilityBuff.vision && Date.now() < abilityBuff.endTime && !isDead;
+  if (!on) { for (const k of Object.keys(_phaseGhosts)) { scene.remove(_phaseGhosts[k]); delete _phaseGhosts[k]; } return; }
+  const t = performance.now() / 1000, seen = new Set();
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (!mesh || !mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
+    seen.add(pid);
+    let gh = _phaseGhosts[pid];
+    if (!gh) {
+      gh = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.30, 1.75, 10), new THREE.MeshBasicMaterial({ color: 0x7af4ff, transparent: true, opacity: 0.3, depthTest: false, depthWrite: false }));
+      gh.renderOrder = 999; gh.frustumCulled = false; scene.add(gh); _phaseGhosts[pid] = gh;
+    }
+    gh.position.set(mesh.position.x, mesh.position.y + 0.9, mesh.position.z);
+    gh.material.opacity = 0.22 + 0.1 * Math.sin(t * 8 + pid.length);
+  }
+  for (const k of Object.keys(_phaseGhosts)) if (!seen.has(k)) { scene.remove(_phaseGhosts[k]); delete _phaseGhosts[k]; }
+}
+// ⏳ Chrono Pistol: where you were, and how healthy, every tenth of a second for the last few seconds.
+const _rwHist = [];
+function _rewindSample() {
+  const now = Date.now();
+  if (isDead || !gameStarted) { _rwHist.length = 0; return; }
+  const last = _rwHist[_rwHist.length - 1];
+  if (last && now - last.t < 100) return;
+  _rwHist.push({ t: now, x: camera.position.x, y: camera.position.y, z: camera.position.z, hp: players[myId]?.hp ?? 100 });
+  while (_rwHist.length && now - _rwHist[0].t > 3600) _rwHist.shift();
+}
+function doRewind(w, ab) {
+  const now = Date.now(), want = now - (ab.rewindMs || 3000);
+  let best = null;
+  for (const s of _rwHist) if (!best || Math.abs(s.t - want) < Math.abs(best.t - want)) best = s;
+  if (!best || now - best.t < 1200) { delete abilityCDs[w.id]; return false; }       // nothing to go back to yet: no cooldown spent
+  spawnAbilityAOEFX(camera.position.clone().setY(Math.max(0.2, camera.position.y - 1.4)), 1.4, 0x7af4ff);   // where you left
+  camera.position.set(best.x, best.y, best.z);
+  slamState = null; playerYVel = 0; _extVel.x = 0; _extVel.z = 0; window._blastCarry = false; window._slideUntil = 0;
+  resolveWallCollisions();
+  const me = players[myId];
+  const gain = me ? Math.max(0, Math.min(150, Math.round(best.hp - me.hp))) : 0;
+  if (gain > 0) { socket.emit('healSelf', { amount: gain }); me.hp += gain; updateHealthHUD(me.hp); }
+  spawnAbilityAOEFX(camera.position.clone().setY(Math.max(0.2, camera.position.y - 1.4)), 1.6, 0x7af4ff);   // where you arrive
+  playSoundEvent('blink', { volume: 1.05 });
+  flashScreen('rgba(122,244,255,0.22)', 280);
+  _fovPunch = Math.max(_fovPunch, 6);
+  _rwHist.length = 0;
+  return true;
 }
 function updateUAV(dt) {
   const mm = document.getElementById('uav-overlay');
@@ -67732,6 +68072,7 @@ function loop() {
   safeLoopStep('edge-warning', syncEdgeWarning);             // "LOBBY 13 · CHILL ZONE · NO DAMAGE" (#35)
   safeLoopStep('admin-cheats', () => updateAdminCheats(dt));// admin cheat tick (fly, kill aura, etc.)
   safeLoopStep('admin-map-preview', updateAdminMapPreview); // green ghost where PLACE IN FRONT will drop
+  safeLoopStep('phasevision', () => updatePhaseVision(dt));
   safeLoopStep('uav', () => updateUAV(dt));        // Predator UAV overlay tick
   safeLoopStep('map-effects', () => updateMapEffects(dt)); // airport darkening, chernobyl gas, mortar prompt
   safeLoopStep('wrap-anim', () => updateWrapScroll(dt));      // the wraps that keep moving
@@ -70812,7 +71153,7 @@ const CLIENT_SKIN_CASES = {
 function skinCaseDef(caseId) { return CLIENT_SKIN_CASES[caseId] || CLIENT_SKIN_CASES.gen1_basic; }
 function skinDefById(skinId) {
   return GEN1_SKIN_BY_ID[skinId] || GEN2_SKIN_BY_ID[skinId] ||
-    MODEL_SKINS.find(s => s.id === skinId) || MELEE_MODEL_SKINS.find(s => s.id === skinId) ||
+    MODEL_SKINS.find(s => s.id === skinId) || MELEE_MODEL_SKINS.find(s => s.id === skinId) || SUPPORT_MODEL_SKINS.find(s => s.id === skinId) ||
     { name: skinId || 'Mystery Skin', rarity: 'basic', blurb: 'A thing happened.' };
 }
 
@@ -70865,7 +71206,7 @@ function showSkinCaseOpening(skinId, duplicate, caseId = 'gen1_basic') {
   const skin = skinDefById(skinId);
   // A skin with an entrance is worth seeing immediately, so the reveal offers
   // to put it on. Only for a new pull, and only for one we know how to equip.
-  const canEquip = !duplicate && !!(skin.weapon || skin.melee);
+  const canEquip = !duplicate && !!(skin.weapon || skin.melee || skin.support);
   const roll = [...c.defs()].sort(() => Math.random() - 0.5).slice(0, 9);
   roll.push(skin);
   const old = document.getElementById('skin-case-opening');
@@ -70909,6 +71250,7 @@ function showSkinCaseOpening(skinId, duplicate, caseId = 'gen1_basic') {
     try {
       if (skin.weapon) setModelSkin(skin.weapon, skin.id);
       else if (skin.melee) setMeleeModelSkin(skin.melee, skin.id);
+      else if (skin.support) setSupportModelSkin(skin.support, skin.id);
     } catch (e) { console.warn('[case equip]', e); }
     el.remove();
     openWeaponSkinsPanel();
@@ -71439,7 +71781,7 @@ function openWeaponSkinsPanel() {
         <div data-smskin="${ms.id}" data-smbase="${bid}" class="sms-cell"
              style="cursor:pointer;border:2px solid ${on === ms.id ? '#99e0ff' : '#444'};border-radius:6px;padding:8px;background:${on === ms.id ? '#10222a' : '#12191c'};">
           <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${ms.sw[0]} 0 50%, ${ms.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
-          <div style="font-size:11px;letter-spacing:1px;color:${on === ms.id ? '#99e0ff' : '#ddd'};">${ms.name}</div>
+          <div style="font-size:11px;letter-spacing:1px;color:${on === ms.id ? '#99e0ff' : '#ddd'};">${GEN2_SUPPORT_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? '🔒 ' : ''}${ms.name}</div>
           <div style="font-size:9px;color:#7a8a90;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
         </div>`).join('');
       rows.push(`
@@ -71542,9 +71884,15 @@ function openWeaponSkinsPanel() {
       <button id="ws-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
     </div>
     <button id="ws-stealth-open" style="width:100%;min-height:44px;background:#243a3e;color:#e9f4f1;border:1px solid #a1bcb8;border-radius:4px;font:inherit;cursor:pointer;">Stealth Collection</button>
+    <div style="margin-bottom:6px;">
+      <input id="ws-find-q" type="search" autocomplete="off" spellcheck="false" placeholder="🔎 Search a weapon or a skin: AK, katana, frag, rubik..." data-no-i18n style="width:100%;box-sizing:border-box;padding:10px 12px;background:#0f0e0a;color:#ffe9a8;border:2px solid #ccaa44;border-radius:6px;font-family:inherit;font-size:14px;letter-spacing:1px;">
+      <div id="ws-find-none" style="display:none;padding:10px;color:#998;font-size:12px;">No weapon or skin matches that.</div>
+    </div>
+    <div id="ws-all">
     ${modelSkinSection()}
     ${meleeModelSkinSection()}
     ${supportModelSkinSection()}
+    </div>
     <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 WEAPON WRAPS <button id="ws-pixelizer" style="margin-left:10px;padding:4px 8px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;">🎨 PAINT YOUR OWN</button></div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun, melee and utility. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.filter(s => !s.contract && (!s.approvedBy || wrapUnlocked(s.id))).map(swatch).join('')}</div>
@@ -71554,6 +71902,27 @@ function openWeaponSkinsPanel() {
     ${gen2CaseSection()}
     ${basicCaseSection()}
   `;
+  // 🔎 Find a weapon: type its name (or a skin's) and only the weapons that match keep their skins on the page.
+  {
+    const q = panel.querySelector('#ws-find-q'), none = panel.querySelector('#ws-find-none'), all = panel.querySelector('#ws-all');
+    const norm = t => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    all.querySelectorAll(':scope > div > div[style*="margin-top:14px"]').forEach(row => { row.dataset.wsrow = '1'; });   // (tagged now: the browser rewrites the style text once we start hiding rows)
+    q.addEventListener('input', () => {
+      const t = norm(q.value); let shown = 0;
+      all.querySelectorAll(':scope > div').forEach(section => {
+        let any = false;
+        section.querySelectorAll(':scope > div[data-wsrow]').forEach(row => {
+          const head = norm(row.firstElementChild && row.firstElementChild.textContent);
+          const skins = [...row.querySelectorAll('.ms-cell,.mms-cell,.sms-cell')].map(c => norm(c.children[1] && c.children[1].textContent));
+          const hit = !t || head.includes(t) || (t.length >= 3 && skins.some(n => n.includes(t)));
+          row.style.display = hit ? '' : 'none'; if (hit) { any = true; shown++; }
+        });
+        section.style.display = any || !t ? '' : 'none';
+      });
+      none.style.display = t && !shown ? 'block' : 'none';
+    });
+    q.addEventListener('keydown', e => e.stopPropagation());
+  }
   const pxBtn = panel.querySelector('#ws-pixelizer');
   panel.querySelector('#ws-stealth-open').onclick=()=>PVE_STEALTH_SHOWROOM.open();
   if (pxBtn) pxBtn.addEventListener('click', () => { panel.style.display = 'none'; openSkinPixelizer('gun'); });
@@ -71591,6 +71960,7 @@ function openWeaponSkinsPanel() {
   });
   panel.querySelectorAll('.sms-cell').forEach(cell => {
     cell.addEventListener('click', () => {
+      if (cell.dataset.smskin && GEN2_SUPPORT_MODEL_SKIN_IDS.has(cell.dataset.smskin) && !ownsSkin(cell.dataset.smskin)) { alert('You have not pulled that skin yet. Open Gen 2 cases in Lobby 13.'); return; }
       setSupportModelSkin(cell.dataset.smbase, cell.dataset.smskin || null);
       openWeaponSkinsPanel();
     });

@@ -11,6 +11,7 @@ Three 1v1 boss fights (the Warden, the Core and the Hydra, in a round arena), La
 (zombie waves with three bot teammates), a longer-field D-Day with fewer troopers,
 Underworld story campaign, Backrooms Levels 0-9, zombie survival, base raid,
 training range, aim trainer, obby, wave mode, maps, weapons, skins and ragdolls.
+Newest: the Phase Rifle (E sends its rounds through walls and lights every enemy up), the Chrono Pistol (E rewinds you 3 seconds, admin gear), a Rubik's Cube P90 that twists a layer every shot, the Stopwatch grenade and the Tidal Fang katana, and a search box on the skins panel.
 Arena matches are single-player bot matches; no human multiplayer exists here.
 
 All equipment is unlocked for local testing, including admin tools. This is a

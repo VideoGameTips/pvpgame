@@ -882,10 +882,10 @@ const WEAPONS = [
     adminItem:true,prototype:true,damageLabel:'\u03a9',mag:1,reserve:0,damage:9999,fireRate:900,reloadTime:0,
     auto:false,pellets:1,spread:0,adsZoom:45,bulletSpeed:300,bulletColor:0xffffff,bulletSize:.06,
     noReload:true,hitscan:true,hitscanRange:100 },
-  { id: 'phase_rifle', name: 'Phase Rifle', type: 'Sci-Fi Rifle', slot: 'primary',
+  { id: 'phase_rifle', name: 'Phase Rifle', type: 'Admin · Sci-Fi Rifle', slot: 'primary',
     mag: 30, reserve: 90, damage: 22, fireRate: 90, reloadTime: 2000, headshotMult: 2.2,
     auto: true, pellets: 1, spread: 0.002, adsZoom: 50, bulletSpeed: 135, noReload: false,
-    bulletColor: 0x66f0ff, bulletSize: 0.04,
+    bulletColor: 0x66f0ff, bulletSize: 0.04, adminItem: true,
     // Rounds go through walls and cover for half damage while it lasts, and every enemy glows through them (see PHASE_FX).
     ability: { name: 'Phase Shift', cd: 18000, desc: '4s · rounds pass through walls for half damage · enemies glow through cover', type: 'buff', duration: 4000, weaponAbId: 'phase_rifle_ph', bulletColor: 0xc47bff, vision: true },
   },
@@ -1522,7 +1522,7 @@ const WEAPON_COSTS = {
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
-  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, phase_rifle: 550,
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
@@ -28464,6 +28464,294 @@ function buildCeilingFan() {
   return _skFinish(g, -0.112, 0, 0.014);
 }
 
+// 🚀 Javelin Launcher -> Katyusha. A rectangular launch rack on a little olive chassis, pitched up, with four red-tipped rockets on it.
+// A shot kicks the rack back along its rails and puffs a cloud of smoke off the rocket tips.
+function buildKatyusha() {
+  const g = new THREE.Group();
+  const olive = _skM(0x56643a, 70, 0xa8b888), steel = _skM(0x8a949c, 180, 0xffffff), dark = _skM(0x39402f, 60, 0x70786c);
+  const rocketM = _skM(0xb4bcc2, 200, 0xffffff), red = _skM(0xd6281f, 120, 0xffb0a0), brass = _skM(0xc89a48, 170, 0xfff0b0);
+  const TH = 0.30, S = Math.sin(TH), C = Math.cos(TH), PV = new THREE.Vector3(0, 0.02, -0.030);
+  const rack = new THREE.Group(); rack.position.copy(PV); rack.rotation.x = TH; g.add(rack);          // built level, tipped up, then its parts handed to the model
+  const W = 0.128, H = 0.066, Z0 = -0.20, Z1 = 0.06, LL = Z1 - Z0, LC = (Z0 + Z1) / 2;
+  for (const s of [-1, 1]) gpBox(rack, olive, 0.008, H, LL, s * W / 2, 0, LC);                         // the side plates
+  for (const z of [-0.15, -0.06, 0.03]) { gpBox(rack, olive, W, 0.006, 0.008, 0, H / 2, z); gpBox(rack, olive, W, 0.006, 0.008, 0, -H / 2, z); }   // hoops: a rectangle round the rockets
+  for (const x of [-0.03, 0.03]) { gpBox(rack, steel, 0.006, 0.005, LL, x, H / 2 + 0.004, LC); gpBox(rack, steel, 0.006, 0.005, LL, x, -H / 2 - 0.004, LC); }   // guide rails
+  gpBox(rack, dark, W, H, 0.008, 0, 0, Z1 + 0.004);                                                    // the blast plate at the back
+  const starShape = new THREE.Shape();
+  for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2 + Math.PI / 2, r = i % 2 ? 0.0075 : 0.018; const x = Math.cos(a) * r, y = Math.sin(a) * r; if (i) starShape.lineTo(x, y); else starShape.moveTo(x, y); }
+  const starGeo = new THREE.ExtrudeGeometry(starShape, { depth: 0.002, bevelEnabled: false });
+  for (const s of [-1, 1]) { const st = new THREE.Mesh(starGeo, red); st.rotation.y = s * Math.PI / 2; st.position.set(s * (W / 2 + 0.004), 0, LC - 0.02); rack.add(st); }   // a red star on each side
+  for (const x of [-0.030, 0.030]) for (const y of [-0.017, 0.017]) {                                  // the four rockets
+    const r = new THREE.Group(); r.position.set(x, y, 0); rack.add(r);
+    const part = (geo, mat, px, py, pz, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(px, py, pz); m.rotation.x = rx; r.add(m); return m; };
+    part(new THREE.CylinderGeometry(0.0125, 0.0125, 0.22, 12), rocketM, 0, 0, -0.08, Math.PI / 2);   // the body
+    part(new THREE.ConeGeometry(0.0125, 0.048, 12), red, 0, 0, -0.214, -Math.PI / 2);                  // the red tip
+    part(new THREE.CylinderGeometry(0.0128, 0.0128, 0.010, 12), red, 0, 0, -0.165, Math.PI / 2);       // a red band behind it
+    part(new THREE.CylinderGeometry(0.0092, 0.011, 0.016, 10), brass, 0, 0, 0.038, Math.PI / 2);       // the nozzle
+    part(new THREE.BoxGeometry(0.034, 0.002, 0.022), rocketM, 0, 0, 0.012); part(new THREE.BoxGeometry(0.002, 0.034, 0.022), rocketM, 0, 0, 0.012);   // the fins
+  }
+  gpBox(g, olive, 0.110, 0.010, 0.150, 0, -0.034, -0.040);                                             // the chassis, level
+  for (const s of [-1, 1]) gpBox(g, olive, 0.010, 0.056, 0.040, s * 0.072, -0.008, -0.030);            // the cheeks the rack pivots on
+  for (const s of [-1, 1]) gpCyl(g, steel, 0.011, 0.011, 0.016, 12, s * 0.080, 0.02, -0.030, 0, Math.PI / 2);   // trunnion caps
+  _skGrip(g, dark, -0.050);
+  g.updateMatrixWorld(true);
+  const parts = [];
+  for (const k of [...rack.children]) { g.attach(k); k.userData.eqHome = { p: k.position.clone(), q: k.quaternion.clone(), s: k.scale.clone() }; parts.push({ o: k, p: k.position.clone() }); }
+  g.remove(rack);
+  const puffs = [];
+  for (let i = 0; i < 16; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _getSmokeTex(), transparent: true, depthWrite: false, color: 0xeceeef, opacity: 0 }));
+    sp.visible = false; sp.userData.eqFx = true; g.add(sp); puffs.push({ sp, age: 9, v: new THREE.Vector3() });
+  }
+  const tip = (x, y) => new THREE.Vector3(x, PV.y + y * C + 0.24 * S, PV.z + y * S - 0.24 * C);     // a rocket's tip, in the model's own space
+  const spawn = () => {
+    const p = puffs.find(q => q.age >= 1); if (!p) return;
+    p.sp.position.copy(tip([-0.03, 0.03][Math.random() < 0.5 ? 0 : 1], [-0.017, 0.017][Math.random() < 0.5 ? 0 : 1]));
+    p.age = 0; p.v.set((Math.random() - 0.5) * 0.04, 0.03 + Math.random() * 0.03, -0.09 - Math.random() * 0.07); p.sp.visible = true;
+  };
+  let kick = 0, was = false;
+  g._calm = () => { kick = 0; for (const q of puffs) { q.age = 9; q.sp.visible = false; } for (const q of parts) q.o.position.copy(q.p); };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { g._calm(); return; }
+    const fired = !!(g._flash && g._flash.visible);
+    if (fired && !was) { kick = 0.030; for (let i = 0; i < 7; i++) spawn(); }                          // the rack kicks back and the smoke goes up
+    was = fired;
+    kick *= Math.exp(-dt * 11);
+    for (const q of parts) q.o.position.set(q.p.x, q.p.y - S * kick, q.p.z + C * kick);              // back along the rails
+    for (const q of puffs) {
+      if (q.age >= 1) { q.sp.visible = false; continue; }
+      q.age = Math.min(1, q.age + dt); q.sp.position.addScaledVector(q.v, dt);
+      q.sp.scale.setScalar(0.03 + q.age * 0.12); q.sp.material.opacity = 0.62 * (1 - q.age);
+    }
+  };
+  return _skFinish(g, -0.27, 0.09, 0.014);
+}
+
+// 🔫 P90 -> PPSh-41. The Soviet drum SMG: a stamped receiver, a wooden stock and pistol grip, a barrel shroud drilled with holes and a round
+// drum magazine that turns while it fires.
+function buildPPSh() {
+  const g = new THREE.Group();
+  const wood = _skM(0x8a5a2e, 70, 0xe0b080), woodD = _skM(0x6c4422, 60, 0xc09060);
+  const steel = _skM(0x5a636e, 150, 0xd0dae8), blued = _skM(0x3e4650, 130, 0xaab6c6), brass = _skM(0xc89a48, 170, 0xfff0b0);
+  const dark = new THREE.MeshPhongMaterial({ color: 0x14171b, shininess: 20 });
+  gpBox(g, steel, 0.042, 0.046, 0.150, 0, 0.012, -0.005);                // the stamped receiver
+  gpBox(g, blued, 0.037, 0.008, 0.130, 0, 0.039, -0.005);                // the top cover
+  gpBox(g, steel, 0.020, 0.012, 0.012, 0, 0.049, 0.050);                 // the flip-up rear sight
+  gpBox(g, brass, 0.008, 0.010, 0.036, 0.0245, 0.026, 0.020);            // the cocking handle
+  gpCyl(g, blued, 0.0245, 0.0245, 0.150, 18, 0, 0.012, -0.150);          // the barrel shroud...
+  const holeGeo = new THREE.CylinderGeometry(0.0034, 0.0034, 0.005, 8);
+  for (let i = 0; i < 8; i++) for (let k = 0; k < 8; k++) {              // ...drilled with rows of holes
+    const a = k / 8 * Math.PI * 2 + (i % 2) * Math.PI / 8, m = new THREE.Mesh(holeGeo, dark);
+    m.position.set(Math.cos(a) * 0.0245, 0.012 + Math.sin(a) * 0.0245, -0.088 - i * 0.017); m.rotation.z = a - Math.PI / 2; g.add(m);
+  }
+  gpBox(g, blued, 0.036, 0.036, 0.034, 0, 0.012, -0.235);                // the muzzle block
+  gpBox(g, steel, 0.030, 0.008, 0.030, 0, 0.034, -0.240, 0.45);          // cut away on top: the compensator
+  gpCyl(g, steel, 0.0075, 0.0075, 0.022, 10, 0, 0.012, -0.262);          // the barrel's end
+  gpBox(g, steel, 0.032, 0.034, 0.060, 0, -0.022, -0.018);               // the neck the drum clips into
+  const drum = new THREE.Group(); drum.position.set(0, -0.058, -0.018); g.add(drum);
+  const dc = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.046, 26), steel); dc.rotation.z = Math.PI / 2; drum.add(dc);
+  for (const s of [-1, 1]) {
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.047, 0.047, 0.003, 26), blued); cap.rotation.z = Math.PI / 2; cap.position.x = s * 0.0245; drum.add(cap);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, h = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.0035, 8), dark); h.rotation.z = Math.PI / 2; h.position.set(s * 0.0262, Math.cos(a) * 0.030, Math.sin(a) * 0.030); drum.add(h); }   // lightening holes
+  }
+  for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2, rib = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.006, 0.012), blued); rib.position.set(0, Math.cos(a) * 0.053, Math.sin(a) * 0.053); rib.rotation.x = a; drum.add(rib); }   // ribs round the drum, so you SEE it turn
+  gpBox(g, wood, 0.038, 0.062, 0.170, 0, -0.008, 0.150);                 // the wooden stock
+  gpBox(g, steel, 0.040, 0.068, 0.010, 0, -0.008, 0.238);                // the butt plate
+  gpBox(g, woodD, 0.026, 0.082, 0.034, 0, -0.066, 0.062, 0.28);          // the pistol grip
+  gpBox(g, steel, 0.006, 0.006, 0.040, 0, -0.033, 0.030);                // the trigger guard
+  gpBox(g, steel, 0.006, 0.016, 0.006, 0, -0.026, 0.020, 0.2);           // the trigger
+  let spin = 0, speed = 0;
+  g._calm = () => { speed = 0; };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { speed = 0; return; }
+    const fired = !!(g._flash && g._flash.visible);
+    speed += ((fired ? 24 : 0) - speed) * Math.min(1, dt * (fired ? 9 : 4));                           // it spools up and runs down
+    spin += speed * dt; drum.rotation.x = spin;
+  };
+  return _skFinish(g, -0.285, 0.012, 0.012);
+}
+
+// 🛰️ Black Hole Seed -> Sputnik. A little polished-silver sphere with four long antennas. Held, the antennas are folded in; thrown, they unfold
+// in flight with a blinking red tip, and when it lands a red radio pulse goes out from it just as the hole swells open.
+function _sputnikBody() {
+  const g = new THREE.Group();
+  const silver = new THREE.MeshPhongMaterial({ color: 0xdfe4ea, shininess: 260, specular: 0xffffff });
+  const seam = new THREE.MeshPhongMaterial({ color: 0x7a828c, shininess: 80, specular: 0xffffff });
+  const redM = new THREE.MeshBasicMaterial({ color: 0xff3a2a });
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.036, 20, 14), silver));
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(0.0362, 0.0012, 6, 28), seam));                          // the seam round its equator
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, b = new THREE.Mesh(new THREE.SphereGeometry(0.0026, 6, 5), seam); b.position.set(Math.cos(a) * 0.0362, Math.sin(a) * 0.0362, 0); g.add(b); }
+  const ants = [];
+  for (const [sx, sy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+    const piv = new THREE.Group(); piv.position.set(sx * 0.019, sy * 0.019, 0.024); g.add(piv);
+    const base = new THREE.Mesh(new THREE.SphereGeometry(0.0036, 6, 5), seam); piv.add(base);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0011, 0.0016, 0.17, 6), silver); rod.rotation.x = Math.PI / 2; rod.position.z = 0.085; piv.add(rod);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.0032, 6, 5), redM); tip.position.z = 0.172; piv.add(tip);
+    ants.push({ piv, sx, sy });
+  }
+  const Z = new THREE.Vector3(0, 0, 1), d = new THREE.Vector3();
+  const pose = u => {                                                                                    // 0 = folded back along the body, 1 = swept out
+    const ang = 0.10 + u * 0.78, s = Math.sin(ang) * 0.7071, c = Math.cos(ang);
+    for (const a of ants) a.piv.quaternion.setFromUnitVectors(Z, d.set(a.sx * s, a.sy * s, c).normalize());
+  };
+  pose(0);
+  return { g, pose, redM };
+}
+function buildSputnik() {
+  const { g, pose, redM } = _sputnikBody();
+  g.rotation.set(0.25, Math.PI + 0.5, 0);                                                                // the antennas point away from you, out in front
+  g._tick = (dt, now, assembling) => { if (!assembling) redM.color.setHex(Math.sin(now * 4) > 0.3 ? 0xff3a2a : 0x6a1812); };   // a slow red blink
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+// The Sputnik's landing: three red radio pulses, on the floor and facing you, each growing and fading in under a second. (Self-contained: this build's
+// seed is the old burst of bolts, so there is no black hole to hang the pulse on.)
+function _sputnikPulse(pos) {
+  const mk = () => new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const rings = [], cy = pos.y + 1.2;
+  for (let i = 0; i < 3; i++) {
+    const flat = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 56), mk()); flat.rotation.x = -Math.PI / 2; flat.position.set(pos.x, pos.y + 0.07, pos.z); flat.visible = false; scene.add(flat);
+    const fan = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 56), mk()); fan.position.set(pos.x, cy, pos.z); fan.visible = false; scene.add(fan);
+    rings.push({ m: flat, i, face: false }, { m: fan, i, face: true });
+  }
+  const t0 = performance.now();
+  const iv = setInterval(() => {
+    const t = (performance.now() - t0) / 1000;
+    for (const r of rings) {
+      const tt = t - r.i * 0.16, p = tt / 0.8;
+      if (tt < 0 || p >= 1) { r.m.visible = false; continue; }
+      r.m.visible = true; r.m.scale.setScalar(0.6 + p * 9); r.m.material.opacity = 0.8 * Math.pow(1 - p, 1.3);
+      if (r.face) r.m.lookAt(camera.position);
+    }
+    if (t > 1.3) { clearInterval(iv); for (const r of rings) { scene.remove(r.m); r.m.geometry.dispose(); r.m.material.dispose(); } }
+  }, 16);
+}
+function _buildSputnikFlight() {
+  const { g, pose, redM } = _sputnikBody();
+  g.scale.setScalar(1.5);
+  const t0 = performance.now();
+  g.children[0].onBeforeRender = () => {                                                                 // (runs every frame it is drawn: no loop needed)
+    const t = (performance.now() - t0) / 1000;
+    pose(Math.max(0, Math.min(1, (t - 0.08) / 0.35)));                                                   // the antennas unfold a moment after it leaves your hand
+    redM.color.setHex(Math.sin(t * 14) > 0 ? 0xff3a2a : 0x7a1a14);
+  };
+  return g;
+}
+
+// 🪽 Minigun -> Stormwing. Grey metallic with blue light: one real minigun (the cluster spins up as ever) and a pair of folded wings.
+// Fire a lot and the back goes red-hot and blasts flame out like a jet. Aim (or brace with E) and the wings snap open and four more barrels slide out of them and fire along with the main gun. Same damage:
+// the four extra barrels are for show, the stats are the minigun's.
+function buildStormwing() {
+  const g = new THREE.Group();
+  const gray = _skM(0x9aa6b4, 220, 0xffffff), mid = _skM(0x6f7a88, 170, 0xdde6f0), dark = _skM(0x3a424d, 90, 0x9aa8b8);
+  const blue = new THREE.MeshBasicMaterial({ color: 0x39b8ff });
+  const flashM = new THREE.MeshBasicMaterial({ color: 0x9fe4ff });
+  gpBox(g, gray, 0.076, 0.072, 0.170, 0, 0.004, 0.040);                  // the housing
+  gpBox(g, mid, 0.077, 0.010, 0.150, 0, 0.038, 0.040);                   // the top plate
+  for (const s of [-1, 1]) gpBox(g, blue, 0.0025, 0.010, 0.120, s * 0.0390, 0.010, 0.040);   // light strips down both sides
+  gpBox(g, blue, 0.040, 0.0025, 0.080, 0, 0.0415, 0.040);                // and one across the top
+  gpCyl(g, mid, 0.040, 0.040, 0.040, 16, 0, 0.004, -0.058);              // the front trunnion
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.038, 0.0025, 6, 24), blue); ring.position.set(0, 0.004, -0.080); g.add(ring);
+  gpCyl(g, dark, 0.034, 0.034, 0.026, 16, 0, 0.004, -0.036);             // the rotor face
+  // the spinning cluster: the render loop turns THIS on z while the trigger is held
+  const cluster = new THREE.Group(); cluster.position.set(0, 0.004, -0.190); g.add(cluster);
+  const bGeo = new THREE.CylinderGeometry(0.0088, 0.0088, 0.300, 10);
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2, bx = Math.cos(a) * 0.024, by = Math.sin(a) * 0.024;
+    const b = new THREE.Mesh(bGeo, mid); b.rotation.x = Math.PI / 2; b.position.set(bx, by, 0); cluster.add(b);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.0104, 0.0104, 0.020, 10), gray); m.rotation.x = Math.PI / 2; m.position.set(bx, by, -0.146); cluster.add(m);
+  }
+  [-0.090, 0.040, 0.130].forEach((z, i) => {
+    const clamp = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.014, 12), gray); clamp.rotation.x = Math.PI / 2; clamp.position.z = z; cluster.add(clamp);
+    if (i < 2) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.037, 0.0022, 6, 20), blue); r.position.z = z - 0.010; cluster.add(r); }   // a blue ring at each clamp
+  });
+  g._barrelCluster = cluster; g._spinRate = 10;
+  gpBox(g, dark, 0.030, 0.036, 0.046, 0, -0.046, 0.030);                 // the delinker
+  gpBox(g, mid, 0.026, 0.030, 0.090, 0, -0.070, 0.076, 0.25);            // the chute
+  gpBox(g, dark, 0.040, 0.020, 0.014, 0, 0.044, 0.120);                  // the rear sight block
+  // the wings: pivots at the housing's shoulders, folded back along the body; each carries two barrels that slide out of it
+  const wings = [];
+  const tips = [];
+  for (const side of [-1, 1]) {
+    const wing = new THREE.Group(); wing.position.set(side * 0.040, -0.010, 0.055); wing.rotation.order = 'YXZ'; g.add(wing);
+    const wpart = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(side * x, y, z); wing.add(m); return m; };
+    wpart(new THREE.BoxGeometry(0.170, 0.006, 0.066), gray, 0.085, 0, 0);                         // the main plate
+    wpart(new THREE.BoxGeometry(0.050, 0.006, 0.040), gray, 0.195, 0, -0.012);                    // the tip
+    wpart(new THREE.BoxGeometry(0.170, 0.0035, 0.004), blue, 0.085, 0.0045, -0.033);              // a light along the leading edge
+    for (let i = 0; i < 4; i++) wpart(new THREE.BoxGeometry(0.150 - i * 0.026, 0.0045, 0.011), i % 2 ? mid : gray, 0.075 - i * 0.010, -0.0005, 0.040 + i * 0.013);   // the feathers
+    const barrels = [];
+    for (const r of [0.070, 0.130]) {
+      const bg = new THREE.Group(); bg.position.set(side * r, 0.0, -0.010); wing.add(bg);
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.0072, 0.0072, 0.300, 10), mid); bar.rotation.x = Math.PI / 2; bar.position.z = -0.150; bg.add(bar);
+      const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.0098, 0.0098, 0.030, 10), gray); sleeve.rotation.x = Math.PI / 2; sleeve.position.z = -0.012; bg.add(sleeve);
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.0085, 0.0016, 6, 14), blue); band.position.z = -0.200; bg.add(band);
+      const flash = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), flashM); flash.position.z = -0.312; flash.visible = false; flash.userData.eqFx = true; bg.add(flash);
+      bg.visible = false; bg.scale.z = 0.001; barrels.push(bg); tips.push(flash);
+    }
+    wing.rotation.y = -side * Math.PI / 2;                                                       // folded back along the body
+    wing.userData.eqHome = { p: wing.position.clone(), q: wing.quaternion.clone(), s: wing.scale.clone() };   // (the entrance always comes back to this)
+    wings.push({ wing, side, barrels });
+  }
+  // the jet exhaust: a block across the back, heat panels on top and two dorsal nozzles. Fire a lot and it goes red-hot and the nozzles blast flame
+  const hotM = new THREE.MeshPhongMaterial({ color: 0x6f7a88, shininess: 120, specular: 0xdde6f0, emissive: 0x000000 });
+  const flameOut = new THREE.MeshBasicMaterial({ color: 0xff5a14, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const flameIn = new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  gpBox(g, hotM, 0.064, 0.056, 0.030, 0, 0.004, 0.140);                  // the exhaust block
+  for (const s of [-1, 1]) gpBox(g, hotM, 0.020, 0.003, 0.110, s * 0.026, 0.0435, 0.045);   // heat panels along the top: the part you see go red
+  for (let i = 0; i < 3; i++) gpBox(g, dark, 0.050, 0.004, 0.004, 0, -0.014 + i * 0.011, 0.156);   // vent slats
+  const flames = [];
+  for (const s of [-1, 1]) {
+    gpCyl(g, hotM, 0.017, 0.012, 0.024, 12, s * 0.022, 0.050, 0.100);   // a flared dorsal nozzle (on top, where you can see the flame)
+    const f = new THREE.Group(); f.position.set(s * 0.022, 0.050, 0.113); f.rotation.y = s * 0.10; f.userData.eqFx = true; g.add(f);
+    const outer = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.075, 10, 1, true), flameOut); outer.rotation.x = Math.PI / 2; outer.position.z = 0.0375; f.add(outer);
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.045, 8, 1, true), flameIn); inner.rotation.x = Math.PI / 2; inner.position.z = 0.0225; f.add(inner);
+    f.visible = false; flames.push(f);
+  }
+  let heat = 0, hold = 0;
+  const exhaust = (dt, fired) => {
+    if (fired) hold = 0.18; else hold = Math.max(0, hold - dt);
+    heat = Math.max(0, Math.min(1, heat + (hold > 0 ? dt * 0.8 : -dt * 0.45)));       // a second or two of fire to get hot, a couple of seconds to cool
+    hotM.color.setRGB(0.435 + 0.565 * heat, 0.478 - 0.25 * heat, 0.533 - 0.43 * heat);
+    hotM.emissive.setRGB(heat * 0.9, heat * 0.16, 0);
+    const len = Math.max(0, (heat - 0.3) / 0.7);
+    for (const f of flames) {
+      f.visible = len > 0;
+      if (len > 0) { const fl = 0.8 + Math.random() * 0.4; f.scale.set(0.7 + len * 0.5 * fl, 0.7 + len * 0.5 * fl, len * fl); }
+    }
+  };
+  _skGrip(g, dark, -0.034);
+  _skFinish(g, -0.362, 0.004, 0.006);
+  let open = 0, last = 0, turn = 0;
+  const pose = o => {
+    const e = o * o * (3 - 2 * o), ang = Math.PI / 2 + (0.42 - Math.PI / 2) * e, ext = Math.max(0, Math.min(1, (o - 0.45) / 0.55));
+    for (const w of wings) {
+      w.wing.rotation.set(0, -w.side * ang, -w.side * 0.14 * e);
+      for (const bg of w.barrels) { bg.rotation.y = w.side * ang; bg.scale.z = Math.max(0.001, ext * ext * (3 - 2 * ext)); bg.visible = ext > 0.02; }
+    }
+  };
+  pose(0);
+  g._calm = () => { open = 0; pose(0); for (const f of tips) f.visible = false; heat = 0; hold = 0; exhaust(0, false); };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { open = 0; for (const f of tips) f.visible = false; for (const f of flames) f.visible = false; return; }       // the entrance owns the wings
+    const aimed = (typeof isADS !== 'undefined' && isADS) || (typeof minigunBraced === 'function' && minigunBraced());
+    open += ((aimed ? 1 : 0) - open) * Math.min(1, dt * (aimed ? 7 : 5));
+    if (Math.abs(open - (aimed ? 1 : 0)) < 0.004) open = aimed ? 1 : 0;
+    pose(open);
+    const fired = !!(g._flash && g._flash.visible), full = open > 0.95;
+    exhaust(dt, fired);
+    const k = 0.75 + 0.25 * Math.sin(now * 3) + (fired ? 0.5 : 0);                       // the blue lights breathe, and flare when it fires
+    blue.color.setRGB(Math.min(1, 0.22 * k), Math.min(1, 0.72 * k), 1);
+    for (const f of tips) { f.visible = fired && full && Math.random() < 0.8; if (f.visible) f.scale.setScalar(0.7 + Math.random() * 0.7); }
+    if (fired && full && now - last > 0.07 && typeof spawnLocalBullet === 'function') {   // a tracer from each wing barrel in turn
+      last = now;
+      const f = tips[turn++ % tips.length], p = new THREE.Vector3(), d = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      f.getWorldPosition(p);
+      try { spawnLocalBullet(p, d, 'wing_' + now + '_' + turn, true, 150, 0x56c8ff, 0.03, 'minigun', { visualOnly: true, maxRange: 45 }); } catch (e) {}
+    }
+  };
+  return g;
+}
+
 // 🪤 Crossbow -> Mousetrap. A spring bar that really snaps, and cheese on the catch.
 function buildMousetrap() {
   const g = new THREE.Group();
@@ -48590,7 +48878,11 @@ function throwSupportItem(item) {
     : (item.bulletColor || 0xffffff);
   const size = item.bulletSize || 0.12;
   const mat  = new THREE.MeshBasicMaterial({ color });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(size, 7, 5), mat);
+  let mesh = new THREE.Mesh(new THREE.SphereGeometry(size, 7, 5), mat);
+  if (item.id === 'black_hole_seed' && equippedSupportModelSkins.black_hole_seed === 'black_hole_sputnik' && ownsSkin('black_hole_sputnik')) {
+    mesh = _buildSputnikFlight();                                                          // the Sputnik skin: a satellite in flight, antennas trailing
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), aimDir.clone().negate());
+  }
   mesh.position.copy(origin);
   scene.add(mesh);
 
@@ -50309,6 +50601,15 @@ const MODEL_SKINS = [
   { id: 'minigun_ceiling_fan', weapon: 'minigun', name: 'Ceiling Fan', rarity: 'rare',
     sw: ['#8a5a2a', '#fff2c8'], build: buildCeilingFan,
     blurb: 'Idles on low. The longer you hold the trigger, the closer it gets to taking off.' },
+  { id: 'javelin_katyusha', weapon: 'javelin_launcher', name: 'Katyusha', rarity: 'legendary',
+    sw: ['#56643a', '#d6281f'], build: buildKatyusha,
+    blurb: 'A launch rack on an olive chassis with four red-tipped rockets. A shot kicks the rack back along its rails and sends a cloud of smoke up off the tips.' },
+  { id: 'p90_ppsh41', weapon: 'p90', name: 'PPSh-41', rarity: 'rare',
+    sw: ['#8a5a2e', '#3e4650'], build: buildPPSh,
+    blurb: 'Wooden stock, a barrel shroud drilled with holes, and a round drum magazine that spins up while it fires.' },
+  { id: 'minigun_stormwing', weapon: 'minigun', name: 'Stormwing', rarity: 'rare',
+    sw: ['#9aa6b4', '#39b8ff'], build: buildStormwing,
+    blurb: 'Grey steel and blue light. Aim, and the wings snap open and four more barrels slide out of them and fire with the main gun. Same damage: the extra barrels are for show.' },
   { id: 'crossbow_mousetrap', weapon: 'crossbow', name: 'Mousetrap', rarity: 'rare',
     sw: ['#c89a58', '#f2c230'], build: buildMousetrap,
     blurb: 'Loaded with cheese. The bar really does snap, and it is faster than it looks.' },
@@ -50517,6 +50818,8 @@ const DONUT_SKIN_IDS = [
 // Mirrors GEN2_SKIN_IDS in server.js (gotcha #4): the server owns the roll and
 // the ownership record, this list only decides what the picker locks.
 const GEN2_MODEL_SKIN_IDS = new Set([
+  'javelin_katyusha', 'p90_ppsh41',
+  'minigun_stormwing',                                          // (no skin is free)
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
@@ -50537,7 +50840,7 @@ const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
   'sabre_balloon', 'katana_tidal_fang',
 ]);
 // 🎬 Utility skins that make an entrance come out of Gen 2 too (no skin is free).
-const GEN2_SUPPORT_MODEL_SKIN_IDS = new Set(['frag_stopwatch']);
+const GEN2_SUPPORT_MODEL_SKIN_IDS = new Set(['frag_stopwatch', 'black_hole_sputnik']);
 const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS,...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
 for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
@@ -52122,16 +52425,25 @@ function buildTrident() {
   along(new THREE.CylinderGeometry(0.0085, 0.0085, 0.52, 10), teal, 0.040);                         // the shaft
   for (let i = 0; i < 4; i++) along(new THREE.CylinderGeometry(0.0105, 0.0105, 0.010, 10), gold, 0.18 + i * 0.045);   // gold bands
   along(new THREE.ConeGeometry(0.012, 0.030, 10), gold, 0.325, 0, 0, false);                       // the butt cap
-  along(new THREE.CylinderGeometry(0.014, 0.011, 0.020, 10), gold, -0.215);                         // collar under the head
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.012, 0.014), gold); bar.position.set(0, 0, -0.232); g.add(bar);   // the crossbar
-  along(new THREE.ConeGeometry(0.0095, 0.070, 8), gold, -0.282, 0, 0, true);                       // centre prong
+  along(new THREE.CylinderGeometry(0.016, 0.012, 0.024, 12), gold, -0.222);                         // the collar under the head
+  const boss = new THREE.Mesh(new THREE.SphereGeometry(0.0145, 12, 9), gold); boss.position.set(0, 0, -0.238); boss.scale.set(1, 1, 0.8); g.add(boss);   // the boss the three prongs grow out of
+  // the centre prong: straight and long, with a leaf-shaped head and two barbs
+  along(new THREE.CylinderGeometry(0.0078, 0.0095, 0.110, 10), gold, -0.292);
+  along(new THREE.ConeGeometry(0.0175, 0.062, 4), gold, -0.378, 0, 0, true);                        // the head: a flat arrow
   for (const sd of [-1, 1]) {
-    along(new THREE.CylinderGeometry(0.0055, 0.0055, 0.050, 8), gold, -0.258, sd * 0.040);          // side prongs
-    along(new THREE.ConeGeometry(0.0075, 0.034, 8), gold, -0.302, sd * 0.040, 0, true);
-    const barb = new THREE.Mesh(new THREE.ConeGeometry(0.0045, 0.020, 6), gold);                   // a barb on each, turned back
-    barb.rotation.set(Math.PI / 2 + 0.2, 0, -sd * 0.7); barb.position.set(sd * 0.030, 0, -0.288); g.add(barb);
+    const barb = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.026, 6), gold);
+    barb.rotation.set(Math.PI / 2 + 0.25, 0, -sd * 0.75); barb.position.set(sd * 0.0125, 0, -0.350); g.add(barb);   // turned back
   }
-  const jewel = new THREE.Mesh(new THREE.OctahedronGeometry(0.0095, 0), gem); jewel.position.set(0, 0, -0.222); jewel.scale.set(1, 1, 1.3); g.add(jewel);
+  // the side prongs: they sweep out from the boss in a curve, then run straight forward and end in a point, like Poseidon's
+  for (const sd of [-1, 1]) {
+    const path = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, -0.238), new THREE.Vector3(sd * 0.018, 0, -0.244), new THREE.Vector3(sd * 0.036, 0, -0.262),
+      new THREE.Vector3(sd * 0.045, 0, -0.288), new THREE.Vector3(sd * 0.046, 0, -0.326)]);
+    const prong = new THREE.Mesh(new THREE.TubeGeometry(path, 18, 0.0058, 8, false), gold); g.add(prong);
+    along(new THREE.ConeGeometry(0.0105, 0.044, 4), gold, -0.348, sd * 0.046, 0, true);             // the point
+    const barb = new THREE.Mesh(new THREE.ConeGeometry(0.0048, 0.022, 6), gold);
+    barb.rotation.set(Math.PI / 2 + 0.2, 0, sd * 0.8); barb.position.set(sd * 0.054, 0, -0.318); g.add(barb);          // a barb on the outside of each
+  }
+  const jewel = new THREE.Mesh(new THREE.OctahedronGeometry(0.0095, 0), gem); jewel.position.set(0, 0, -0.238); jewel.scale.set(1, 1, 1.3); g.add(jewel);
   [[-0.030, 0.030, -0.205, 0.0050], [0.034, -0.026, -0.190, 0.0040], [0.012, 0.040, -0.175, 0.0045]].forEach(([x, y, z, r]) => {
     const d = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), drop); d.position.set(x, y, z); g.add(d);
   });
@@ -52187,7 +52499,7 @@ function buildGiftBag() {
 const MELEE_MODEL_SKINS = [
   { id: 'spear_trident', melee: 'spear', name: 'Trident', rarity: 'good',
     sw: ['#d4a935', '#1f9fae'], build: buildTrident,
-    blurb: 'Three points where there was one. Slightly damp.' },
+    blurb: 'A real trident: a long centre point and two curved prongs with barbs. Slightly damp.' },
   { id: 'knife_floss', melee: 'knife', name: 'Dental Floss', rarity: 'good',
     sw: ['#f2f4f6', '#3ab2c8'], build: buildDentalFloss,
     blurb: 'I hate dentists... the cutter is the sharp part.' },
@@ -52599,6 +52911,9 @@ const SUPPORT_MODEL_SKINS = [
     blurb: 'Army slang, taken literally. The pin is real.' },
   { id: 'frag_disco',      support: 'frag',        name: 'Disco Ball',       rarity: 'good', sw: ['#dfe7f0', '#ff4fd8'], build: buildDiscoBall,
     blurb: 'Everybody dances. One of them leaves early.' },
+  { id: 'black_hole_sputnik', support: 'black_hole_seed', name: 'Sputnik', rarity: 'rare', sw: ['#dfe4ea', '#d6281f'], build: buildSputnik,
+    blurb: 'A little silver satellite. Thrown, its four long antennas unfold, and a red radio pulse goes out as the black hole swells open.',
+    equip: 'unfold', equipMs: 850, equipSfx: ['fold', 'click'] },
   { id: 'frag_stopwatch', support: 'frag', name: 'Stopwatch', rarity: 'rare', sw: ['#cfd6de', '#e0281e'], build: buildStopwatch,
     blurb: 'A sports stopwatch in grenade rubber. The red hand ticks round to nothing in particular. It is wound and clicked on piece by piece when you draw it.',
     equip: 'windup', equipMs: 900, equipSfx: ['windup', 'ding'] },
@@ -55067,6 +55382,9 @@ const SKIN_FX = {
       K(.62,{py:.05,rx:.15,hx:.07,hy:-.22,hz:.05,ay:.06}),
       K(.74,{py:.04,rx:.10,hy:-.04,ay:.06}), K(.90,{py:.01,ay:.0})],
       [RP(.62,'round','arrive',1,'muzzle')], [[.30,'tick'],[.46,'tick'],[.62,'tick'],[.82,'ticking']], 'ding') },
+  javelin_katyusha: { equip: 'build', equipMs: 1000, equipSfx: ['whoosh', 'slam'], equipBeats: [[.7, 'click']] },
+  p90_ppsh41: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null], equipBeats: [[.55, 'slam']] },
+  minigun_stormwing: { equip: 'unfold', equipMs: 950, equipSfx: ['fold', 'click'], equipBeats: [[.55, 'click'], [.82, 'chime']] },
   minigun_ceiling_fan: { sound: _fxS('whirr', .28, .07, 700, 380),
     equip: 'spin', equipMs: 900, equipSfx: ['whoosh', 'ding'],
     // the light kit unscrewed, a fresh bulb dropped in, screwed back on, and two tugs on the pull chain
@@ -60856,7 +61174,7 @@ function explodeSupport(g) {
   } else {
     const color = item.randomBulletColor ? 0xffaa00 : (item.bulletColor || 0xff7700);
     spawnAbilityAOEFX(pos, getSupportRadius(item), color);
-    if (item.id === 'black_hole_seed') playSoundEvent('blackhole_collapse', { position: pos, volume: 1.15 });
+    if (item.id === 'black_hole_seed') { playSoundEvent('blackhole_collapse', { position: pos, volume: 1.15 }); if (g.isOwn && equippedSupportModelSkins.black_hole_seed === 'black_hole_sputnik' && ownsSkin('black_hole_sputnik')) _sputnikPulse(pos); }   // the Sputnik: a red radio pulse as it lands
     else if (item.id === 'air_grenade') playSoundEvent('air_burst', { position: pos, volume: 1.15 });
     spawnExplosion(pos);
   }

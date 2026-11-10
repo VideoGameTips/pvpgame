@@ -20724,6 +20724,7 @@ function triggerMuzzleBlast(model, opts = {}) {
   ejectFiredCase(model);
   indexCylinder(model);
   const flash = model._flash;
+  model._steamShot?.();                                  // a skin's own reaction to a shot (ported from PVP Arena)
   const st = muzzleStyleFor(opts.weapon);
   const tint = opts.color || (flash.material && flash.material.color ? flash.material.color.getHex() : 0xffcc66);
   // No two shots look alike: random roll and a size jitter.
@@ -29027,6 +29028,878 @@ function buildGlitchDeagle() {
       }
     }
   };
+  return g;
+}
+
+// ☠️ Vector -> NEON//ANARCHY. A compact prototype built by a rogue hacker in an underground megacity, low-poly and deliberately lopsided. The side that faces YOU is stripped bare:
+// circuit traces, chips and an electromagnetic coil with four rectangular blocks that shuttle along it. The far side is overlapping black and crimson armour with hazard labels.
+// Two armour panels cover the coil; aim and they slide back. A hologram of your ammunition floats over the receiver and corrupts the longer you hold the trigger (OVERRIDE, UNSTABLE,
+// SYSTEM ERROR). Neon pulses race along the deck, faster when you fire. Reload: the panels open, the magazine drops, a new one locks in and the circuits boot back up. Inspect is SYSTEM HIJACK:
+// it malfunctions, the panels split, a red skull rises over the receiver ("UNAUTHORIZED USER DETECTED"), glitches, the display flips to "ACCESS GRANTED", the whole gun snaps shut and every strip flashes crimson.
+const _naTexs = {};
+function _naLabelTex(kind) {                                                   // a hazard label (kind 'a' WARNING, 'b' HIGH VOLTAGE); null where there is no canvas
+  if (kind in _naTexs) return _naTexs[kind];
+  let t = null;
+  try {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 64;
+    const x = c.getContext('2d');
+    if (x) {
+      x.fillStyle = '#0a0a0e'; x.fillRect(0, 0, 128, 64);
+      x.fillStyle = '#ffd21a';
+      for (let i = -1; i < 14; i++) for (const y0 of [0, 54]) { x.beginPath(); x.moveTo(i * 12, y0); x.lineTo(i * 12 + 7, y0); x.lineTo(i * 12 - 3, y0 + 10); x.lineTo(i * 12 - 10, y0 + 10); x.closePath(); x.fill(); }
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      if (kind === 'a') {
+        x.fillStyle = '#ff2040'; x.font = 'bold 20px monospace'; x.fillText('WARNING', 64, 24);
+        x.fillStyle = '#f2f2f2'; x.font = 'bold 9px monospace'; x.fillText('UNAUTHORIZED USERS', 64, 38); x.fillText('WILL BE TERMINATED', 64, 47);
+      } else {
+        x.fillStyle = '#ff2bd6'; x.font = 'bold 12px monospace'; x.fillText('HIGH VOLTAGE', 64, 20);
+        x.fillStyle = '#f2f2f2'; for (let i = 0; i < 30; i++) x.fillRect(14 + i * 3.4, 27, (i * 7 % 3) + 1, 12);
+        x.font = 'bold 8px monospace'; x.fillText('NO SAFETY // NO LAW', 64, 47);
+      }
+      x.strokeStyle = '#ff2040'; x.lineWidth = 2; x.strokeRect(1, 1, 126, 62);
+      t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false;
+      if (THREE.SRGBColorSpace) t.colorSpace = THREE.SRGBColorSpace;
+    }
+  } catch (e) { t = null; }
+  return _naTexs[kind] = t;
+}
+
+function buildNeonAnarchy() {
+  const g = new THREE.Group();
+  const rig = new THREE.Group(); g.add(rig);                                    // everything but the hands, so the whole gun can shudder and snap
+  const blk = new THREE.MeshPhongMaterial({ color: 0x0b0b10, shininess: 40, specular: 0x2a2a3a, flatShading: true });
+  const blk2 = new THREE.MeshPhongMaterial({ color: 0x16161e, shininess: 70, specular: 0x4a4a60, flatShading: true });
+  const cr = new THREE.MeshPhongMaterial({ color: 0xb3102b, emissive: 0x2a0208, shininess: 110, specular: 0xff8a9a, flatShading: true });
+  const crD = new THREE.MeshPhongMaterial({ color: 0x6e0a1a, emissive: 0x1a0106, shininess: 80, specular: 0xc05a6a, flatShading: true });
+  const accent = new THREE.MeshBasicMaterial({ color: 0xff2bb0 });              // the neon that is not part of the chase: barrel ring, slits, butt strip
+  const traceM = new THREE.MeshBasicMaterial({ color: 0xff2bd6 });              // circuit traces
+  const nodeM = new THREE.MeshBasicMaterial({ color: 0xffd0f0 });
+  const coilM = new THREE.MeshBasicMaterial({ color: 0xff2bd6, transparent: true, opacity: 0.4 });
+  const addGlow = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const segMats = Array.from({ length: 10 }, () => new THREE.MeshBasicMaterial({ color: 0x2a0412 }));
+  const magWinM = new THREE.MeshBasicMaterial({ color: 0xff2bd6 });
+  const box = (m, w, h, d, x, y, z, parent = rig, rx = 0, ry = 0, rz = 0) => gpBox(parent, m, w, h, d, x, y, z, rx, ry, rz);
+
+  // ── The chassis: the Vector's outline in a thin black core, so the two flanks can be different ──
+  gpPlate(rig, blk, [
+    [-0.170, 0.008], [-0.156, 0.030], [-0.030, 0.030], [-0.020, 0.040], [0.096, 0.040],
+    [0.108, 0.020], [0.150, 0.018], [0.150, -0.014], [0.104, -0.018], [0.096, -0.048],
+    [0.030, -0.052], [0.016, -0.020], [-0.030, -0.018], [-0.040, -0.006], [-0.164, -0.006],
+  ], 0.030, 0);
+  box(blk2, 0.038, 0.008, 0.230, 0, 0.040, -0.030);                              // the deck the neon runs along
+  box(blk2, 0.024, 0.008, 0.240, 0, 0.048, -0.028);                              // rail
+  for (let i = 0; i < 11; i++) box(crD, 0.026, 0.005, 0.006, 0, 0.052, -0.136 + i * 0.022);
+  segMats.forEach((m, i) => { for (const sd of [-1, 1]) box(m, 0.004, 0.003, 0.016, sd * 0.0175, 0.0443, -0.130 + i * 0.0225); });
+  box(cr, 0.022, 0.004, 0.030, 0, 0.0535, -0.150); box(cr, 0.022, 0.004, 0.030, 0, 0.0535, 0.060);       // armour bridging the rail
+  // ── The side that faces you: bare machinery ──
+  box(blk2, 0.006, 0.040, 0.240, -0.018, 0.016, -0.020);                         // the bed everything is bolted to
+  const H = [[0.030, -0.085, 0.100], [0.023, -0.070, 0.070], [0.013, -0.105, 0.060], [0.005, -0.058, 0.050], [0.028, -0.135, 0.020]];
+  const V = [[0.0265, -0.035, 0.012], [0.018, -0.120, 0.020], [0.009, -0.075, 0.016], [0.0235, -0.138, 0.012]];
+  for (const [y, z, len] of H) box(traceM, 0.0016, 0.0016, len, -0.0212, y, z);
+  for (const [y, z, len] of V) box(traceM, 0.0016, len, 0.0016, -0.0212, y, z);
+  for (const [y, z] of [[0.030, -0.035], [0.013, -0.075], [0.005, -0.033], [0.028, -0.145], [0.023, -0.035], [0.0295, -0.032]]) box(nodeM, 0.0026, 0.004, 0.004, -0.0214, y, z);
+  for (const z of [-0.118, -0.064]) { box(blk, 0.004, 0.012, 0.016, -0.0235, 0.018, z); for (let p = 0; p < 4; p++) box(nodeM, 0.0012, 0.002, 0.003, -0.0252, 0.0125 + p * 0.0033, z + 0.010); }   // chips with pins
+  const coil = new THREE.Group(); coil.position.set(-0.0235, 0.016, 0.040); rig.add(coil);                      // the electromagnetic mechanism
+  gpCyl(coil, coilM, 0.0068, 0.0068, 0.130, 8, 0, 0, 0);
+  for (let i = 0; i < 7; i++) gpCyl(coil, blk, 0.0092, 0.0092, 0.005, 8, 0, 0, -0.054 + i * 0.018);
+  const blocks = [0, 1, 2, 3].map(i => { const b = box(cr, 0.008, 0.013, 0.016, -0.0255, 0.0305, -0.002 + i * 0.030); b._z = b.position.z; return b; });
+  box(blk, 0.003, 0.003, 0.140, -0.0255, 0.0235, 0.040);                         // the guide the blocks ride on
+  for (let i = 0; i < 3; i++) gpCyl(rig, blk, 0.0030, 0.0030, 0.110, 5, -0.0225 + i * 0.0006, -0.016 + i * 0.004, -0.060 + i * 0.004);   // cable bundle
+  for (const z of [-0.100, -0.060]) box(cr, 0.007, 0.018, 0.004, -0.0235, -0.006, z);                                // cable sleeves
+  // ── The far side: overlapping armour ──
+  gpPlate(rig, blk2, [[-0.130, 0.030], [0.060, 0.034], [0.108, 0.020], [0.108, -0.010], [0.050, -0.016], [-0.130, -0.002]], 0.006, 0.0185);
+  gpPlate(rig, cr, [[-0.110, 0.026], [0.000, 0.030], [0.040, 0.020], [0.040, -0.012], [-0.060, -0.012], [-0.110, 0.004]], 0.005, 0.0235);
+  gpPlate(rig, blk, [[-0.050, 0.022], [0.050, 0.026], [0.092, 0.014], [0.090, -0.008], [-0.010, -0.010]], 0.005, 0.0275);
+  const labA = _naLabelTex('a'), labB = _naLabelTex('b');
+  const decal = (parent, tex, w, h, x, y, z, fallback) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex || null, color: tex ? 0xdddddd : fallback, side: THREE.DoubleSide }));
+    m.position.set(x, y, z); m.rotation.y = Math.PI / 2; parent.add(m); return m;
+  };
+  decal(rig, labB, 0.060, 0.026, 0.0266, 0.007, -0.062, 0xff2bd6);
+  // ── The two sliding panels, hinged at their rear edge so the inspect can swing them open like doors ──
+  const mkPanel = (x, zRear) => { const p = new THREE.Group(); p.position.set(x, 0, zRear); p._home = p.position.clone(); p._zr = zRear; rig.add(p); return p; };
+  const rel = (p, pts) => pts.map(([z, y]) => [z - p._zr, y]);
+  const panL = mkPanel(-0.0375, 0.105);
+  gpPlate(panL, cr, rel(panL, [[-0.015, 0.036], [0.085, 0.040], [0.105, 0.026], [0.105, -0.010], [0.060, -0.016], [-0.015, -0.004]]), 0.005, 0);
+  gpPlate(panL, blk, rel(panL, [[0.020, 0.030], [0.080, 0.033], [0.098, 0.022], [0.098, -0.006], [0.060, -0.010], [0.020, 0.000]]), 0.003, -0.0035);
+  for (const z of [0.030, 0.050, 0.070]) box(accent, 0.0012, 0.018, 0.004, -0.0056, 0.012, z - 0.105, panL);
+  const panR = mkPanel(0.0345, 0.062);
+  gpPlate(panR, cr, rel(panR, [[-0.105, 0.034], [0.020, 0.040], [0.062, 0.030], [0.062, -0.012], [-0.020, -0.018], [-0.105, 0.000]]), 0.005, 0);
+  gpPlate(panR, blk, rel(panR, [[-0.085, 0.027], [0.010, 0.031], [0.045, 0.022], [0.045, -0.004], [-0.020, -0.010], [-0.085, 0.002]]), 0.003, 0.0035);
+  decal(panR, labA, 0.066, 0.030, 0.0058, 0.012, -0.030 - 0.062, 0xffd21a);
+  // ── Grip, magazine, trigger ──
+  gpPlate(rig, blk2, [[0.078, -0.020], [0.100, -0.042], [0.102, -0.098], [0.078, -0.108], [0.058, -0.056], [0.056, -0.024]], 0.028, 0);
+  for (const sd of [-1, 1]) for (let i = 0; i < 3; i++) box(cr, 0.002, 0.006, 0.014, sd * 0.0148, -0.050 - i * 0.016, 0.082 + i * 0.002);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 4, 8, Math.PI * 1.05), blk2);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.032, 0.030); rig.add(guard);
+  box(cr, 0.005, 0.015, 0.005, 0, -0.024, 0.030, rig, 0.2);
+  box(cr, 0.012, 0.010, 0.014, 0.019, 0.004, 0.056);                              // charging handle
+  box(nodeM, 0.008, 0.008, 0.010, 0.019, -0.010, 0.020);                         // selector
+  box(blk, 0.026, 0.024, 0.038, 0, -0.026, -0.006);                              // magwell
+  const magG = new THREE.Group(); const magHome = new THREE.Vector3(0, -0.086, -0.006); magG.position.copy(magHome); rig.add(magG);
+  box(blk2, 0.022, 0.110, 0.034, 0, 0, 0, magG);
+  for (let i = 0; i < 4; i++) box(crD, 0.023, 0.004, 0.010, 0, 0.036 - i * 0.024, 0, magG);
+  box(cr, 0.024, 0.010, 0.036, 0, -0.060, 0, magG);
+  box(magWinM, 0.002, 0.060, 0.006, -0.0116, 0.002, 0, magG);                    // the ammo window
+  // ── Stock, barrel, muzzle ──
+  for (const x of [-0.014, 0.014]) box(blk2, 0.006, 0.006, 0.110, x, 0.010, 0.196);
+  box(blk, 0.040, 0.044, 0.012, 0, 0.006, 0.252, rig, 0.08);
+  box(cr, 0.040, 0.010, 0.014, 0, 0.026, 0.250, rig, 0.08);
+  box(accent, 0.004, 0.030, 0.002, 0, 0.004, 0.2595, rig, 0.08);
+  box(blk, 0.030, 0.008, 0.020, 0, 0.030, 0.150);                                 // hinge
+  gpCyl(rig, blk2, 0.0070, 0.0070, 0.090, 8, 0, 0.010, -0.200);
+  gpCyl(rig, cr, 0.0108, 0.0108, 0.030, 8, 0, 0.010, -0.176);                     // shroud
+  gpCyl(rig, blk, 0.0118, 0.0118, 0.020, 8, 0, 0.010, -0.238);
+  gpCyl(rig, accent, 0.0123, 0.0123, 0.003, 8, 0, 0.010, -0.222);
+  for (const sd of [-1, 1]) box(cr, 0.003, 0.012, 0.014, sd * 0.0130, 0.010, -0.240);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.018, 5, 4), new THREE.MeshBasicMaterial({ color: 0xff2a6a }));
+  flash.visible = false; flash.position.set(0, 0.010, -0.262); rig.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  // ── The hologram counter: a screen on a stalk, left of the sight line, turned to face you ──
+  box(blk, 0.003, 0.020, 0.003, -0.030, 0.060, 0.034); box(cr, 0.012, 0.003, 0.012, -0.030, 0.0485, 0.034);
+  const DW = 192, DH = 72;
+  let dc = null, dx = null, dtex = null;
+  try { dc = document.createElement('canvas'); dc.width = DW; dc.height = DH; dx = dc.getContext('2d'); if (dx) { dtex = new THREE.CanvasTexture(dc); dtex.minFilter = THREE.LinearFilter; dtex.generateMipmaps = false; if (THREE.SRGBColorSpace) dtex.colorSpace = THREE.SRGBColorSpace; } } catch (e) { dx = null; dtex = null; }
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.074, 0.0278), new THREE.MeshBasicMaterial({ map: dtex || null, color: dtex ? 0xffffff : 0xff2bd6, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }));
+  screen.rotation.order = 'YXZ'; screen.rotation.set(-0.33, -0.44, 0); screen._home = new THREE.Vector3(-0.042, 0.076, 0.036); screen.position.copy(screen._home); rig.add(screen);
+  const frame = (col, a) => { dx.strokeStyle = col; dx.lineWidth = 3; dx.strokeRect(2, 2, DW - 4, DH - 4); dx.fillStyle = col; for (const [px, py] of [[0, 0], [DW - 10, 0], [0, DH - 4], [DW - 10, DH - 4]]) dx.fillRect(px, py, 10, 4); };
+  let shown = '', lastPaint = -9;
+  const paint = (label, big, bar, col, glitch) => {                               // label, a big line, a 0..1 bar (or -1), a colour, and how torn it is
+    if (!dx) return;
+    dx.clearRect(0, 0, DW, DH);
+    dx.fillStyle = 'rgba(46,0,30,0.62)'; dx.fillRect(0, 0, DW, DH);
+    frame(col);
+    dx.textBaseline = 'top'; dx.textAlign = 'left'; dx.fillStyle = col;
+    dx.font = 'bold 15px monospace'; dx.fillText(label, 10, 8);
+    dx.font = 'bold 34px monospace'; dx.fillText(big, 10, 24);
+    if (bar >= 0) { for (let i = 0; i < 16; i++) { dx.fillStyle = i < Math.round(bar * 16) ? col : 'rgba(255,255,255,0.14)'; dx.fillRect(10 + i * 10.5, 62 - 6, 8, 6); } }
+    dx.fillStyle = 'rgba(0,0,0,0.28)'; for (let y = 0; y < DH; y += 4) dx.fillRect(0, y, DW, 1);
+    if (glitch > 0) for (let k = 0; k < 2 + Math.floor(glitch * 4); k++) { const y = Math.floor(Math.random() * (DH - 8)), h = 3 + Math.floor(Math.random() * 10), off = (Math.random() - 0.5) * 36 * glitch; dx.drawImage(dc, 0, y, DW, h, off, y, DW, h); }
+    dtex.needsUpdate = true;
+  };
+  const paintText = (l1, l2, col, tear) => {                                      // two centred lines (the inspect's messages)
+    if (!dx) return;
+    dx.clearRect(0, 0, DW, DH);
+    dx.fillStyle = 'rgba(46,0,18,0.7)'; dx.fillRect(0, 0, DW, DH);
+    frame(col);
+    dx.textBaseline = 'middle'; dx.textAlign = 'center'; dx.fillStyle = col; dx.font = 'bold 22px monospace';
+    dx.fillText(l1, DW / 2, 24); dx.fillText(l2, DW / 2, 48);
+    dx.fillStyle = 'rgba(0,0,0,0.28)'; for (let y = 0; y < DH; y += 4) dx.fillRect(0, y, DW, 1);
+    if (tear > 0) for (let k = 0; k < 3 + Math.floor(tear * 4); k++) { const y = Math.floor(Math.random() * (DH - 8)), h = 3 + Math.floor(Math.random() * 12); dx.drawImage(dc, 0, y, DW, h, (Math.random() - 0.5) * 50 * tear, y, DW, h); }
+    dtex.needsUpdate = true;
+  };
+  paintText('NEON//', 'ANARCHY', '#ff2bd6', 0);                                    // what a copy of the model (an opponent's) keeps showing
+  // ── The skull: red, low-poly, facing you, rising on a beam over the receiver ──
+  const skull = new THREE.Group(); skull.visible = false; skull.position.set(0, 0.06, 0.010); rig.add(skull);
+  const skM = new THREE.MeshBasicMaterial({ color: 0xff1030, transparent: true, opacity: 0.88 }), blkB = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const cran = new THREE.Mesh(new THREE.IcosahedronGeometry(0.026, 0), skM); cran.scale.set(1, 0.92, 1.05); cran.position.y = 0.020; skull.add(cran);
+  box(skM, 0.030, 0.014, 0.026, 0, -0.006, 0.004, skull);
+  for (let i = -2; i <= 2; i++) box(blkB, 0.0022, 0.007, 0.002, i * 0.0058, -0.012, 0.0175, skull);                  // teeth gaps
+  for (const sd of [-1, 1]) box(blkB, 0.010, 0.011, 0.008, sd * 0.0112, 0.018, 0.0225, skull);                        // eye sockets
+  box(blkB, 0.005, 0.008, 0.006, 0, 0.007, 0.0255, skull, 0, 0, Math.PI / 4);                                       // nose
+  const rings = [0.022, 0.032, 0.042].map((r, i) => { const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.0013, 4, 12), addGlow(0xff2040, 0.6 - i * 0.12)); t.rotation.x = Math.PI / 2; t.position.y = -0.012 - i * 0.010; skull.add(t); return t; });
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.030, 0.06, 6, 1, true), addGlow(0xff2040, 0.16)); beam.position.y = -0.045; skull.add(beam);
+  g.traverse(o => { if (o.isMesh) o.userData.noSmooth = true; });                // 100% low-poly: never rounded off
+  // ── Motion ──
+  const S = { aim: 0, heat: 0, shot: 0, rp: 0, chase: 0, open: 0, swing: 0, kick: 0, glow: 1, flashK: 0, skull: 0, mode: 'ammo' };
+  const smooth = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+  const dark = new THREE.Color(0x2a0412), hot = new THREE.Color(0xff2bb0), red = new THREE.Color(0xff1428), tmp = new THREE.Color();
+  const reset = () => {
+    Object.assign(S, { aim: 0, heat: 0, shot: 0, open: 0, swing: 0, kick: 0, glow: 1, flashK: 0, skull: 0, mode: 'ammo' });
+    panL.position.copy(panL._home); panR.position.copy(panR._home); panL.rotation.set(0, 0, 0); panR.rotation.set(0, 0, 0);
+    rig.position.set(0, 0, 0); rig.scale.set(1, 1, 1); magG.position.copy(magHome); magG.rotation.set(0, 0, 0); magG.visible = true;
+    skull.visible = false; screen.position.copy(screen._home); screen.scale.set(1, 1, 1);
+    blocks.forEach(b => { b.position.z = b._z; });
+    segMats.forEach(m => m.color.copy(dark)); traceM.color.setHex(0xff2bd6); magWinM.color.setHex(0xff2bd6); coilM.opacity = 0.4;
+    shown = '';
+  };
+  g._calm = reset;
+  g._steamShot = () => { S.shot = 1; S.heat = Math.min(1, S.heat + 0.065); };     // the muzzle-blast hook
+  g._S = S; g._panL = panL; g._panR = panR; g._skull = skull; g._mag = magG; g._screen = screen; g._blocks = blocks; g._segMats = segMats; g._coilM = coilM;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { reset(); return; }
+    const inspecting = !!(g._inspectMode && g._reloadStart), reloading = !!(g._reloadStart && !g._inspectMode);
+    const T = g._reloadStart ? Math.max(0, Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || (inspecting ? 2600 : 1800)))) : 0;
+    S.aim += ((isADS && !inspecting && !reloading ? 1 : 0) - S.aim) * Math.min(1, dt * 9);
+    S.heat = Math.max(0, S.heat - dt * 0.33);
+    S.shot = Math.max(0, S.shot - dt / 0.10);
+    S.rp += dt * 85 * (0.2 + S.shot);
+    S.chase += dt * (7 + 55 * S.shot + 20 * S.heat);
+    let open = S.aim, swing = 0, kick = 0, glow = 1, flashK = 0, skullK = 0, jitter = 0, boot = 1, uiScale = 1;
+    let line = null;                                                             // an inspect message, if one is up
+    if (reloading) {                                                             // panels open, the magazine falls, a new one locks in, the circuits boot
+      open = Math.max(open, smooth(0.0, 0.14, T) * (1 - smooth(0.66, 0.80, T)));
+      boot = smooth(0.78, 1.0, T); glow = 0.12 + 0.88 * boot;
+      const d = smooth(0.14, 0.34, T), r = smooth(0.44, 0.62, T);
+      if (T < 0.44) { magG.position.set(magHome.x, magHome.y - 0.20 * d * d, magHome.z + 0.012 * d); magG.rotation.x = -0.5 * d; magG.visible = d < 0.97; }
+      else { magG.position.copy(magHome); magG.position.y -= 0.14 * (1 - r); magG.rotation.x = 0; magG.visible = true; }
+      if (T > 0.60 && T < 0.70) magWinM.color.setHex(0xffffff); else magWinM.color.setHex(0xff2bd6);
+    } else { magG.position.copy(magHome); magG.rotation.x = 0; magG.visible = true; magWinM.color.setHex(0xff2bd6); }
+    if (inspecting) {                                                            // SYSTEM HIJACK
+      const t = T;
+      jitter = smooth(0.0, 0.10, t) * (1 - smooth(0.14, 0.20, t)) + 0.5 * smooth(0.54, 0.58, t) * (1 - smooth(0.68, 0.72, t));       // it shudders, then once more as the skull tears
+      const split = smooth(0.10, 0.24, t) * (1 - smooth(0.80, 0.84, t));
+      open = Math.max(open, split); swing = split;
+      skullK = smooth(0.24, 0.38, t) * (1 - smooth(0.70, 0.78, t));
+      kick = smooth(0.80, 0.84, t) * (1 - smooth(0.84, 0.93, t));                // snaps shut
+      flashK = smooth(0.84, 0.86, t) * (1 - smooth(0.86, 0.98, t));
+      glow = 1 + 0.6 * split;
+      uiScale = 1 + 0.55 * smooth(0.10, 0.18, t) * (1 - smooth(0.86, 0.94, t));
+      if (t >= 0.14 && t < 0.54) line = ['UNAUTHORIZED', 'USER DETECTED', (Math.floor(now * 8) % 2) ? '#ff1030' : '#ff6a78', 0];
+      else if (t >= 0.54 && t < 0.60) line = ['UNAUTH0R1Z3D', 'US3R D3T3CT3D', '#2bf0ff', 1];
+      else if (t >= 0.60 && t < 0.84) line = ['ACCESS', 'GRANTED', '#39ff8a', t < 0.64 ? 0.8 : 0];
+    }
+    S.open += (open - S.open) * Math.min(1, dt * (inspecting && kick > 0 ? 40 : 14));
+    S.swing = swing; S.kick = kick; S.glow = glow; S.flashK = flashK; S.skull = skullK;
+    const so = inspecting && kick > 0 ? Math.min(1, open) : S.open;
+    panL.position.set(panL._home.x - 0.004 * so, 0, panL._home.z + 0.100 * so);
+    panR.position.set(panR._home.x + 0.004 * so, 0, panR._home.z + 0.100 * so);
+    panL.rotation.y = 0.80 * S.swing; panR.rotation.y = -0.80 * S.swing;
+    rig.position.set((Math.random() - 0.5) * 0.004 * jitter, (Math.random() - 0.5) * 0.004 * jitter, 0.022 * kick + (Math.random() - 0.5) * 0.004 * jitter);
+    rig.scale.setScalar(1 + 0.05 * Math.sin(kick * Math.PI));
+    // the blocks shuttle while firing; the coil glows when it is exposed or working
+    for (let i = 0; i < blocks.length; i++) blocks[i].position.z = blocks[i]._z + 0.011 * Math.sin(S.rp + i * Math.PI / 2) * Math.min(1, S.shot * 1.2);
+    coilM.opacity = Math.min(1, (0.28 + 0.35 * S.aim + 0.55 * S.shot + 0.3 * S.heat) * glow);
+    // neon pulses race along the deck
+    hot.setHex(0xff2bb0); if (S.heat > 0) hot.lerp(red, S.heat);
+    for (let i = 0; i < segMats.length; i++) {
+      const N = segMats.length, dd = ((S.chase - i) % N + N) % N;
+      let v = Math.max(0, 1 - Math.min(dd, N - dd) / 2.2);
+      v = (0.18 + 0.82 * v) * (reloading ? 0.15 + 0.85 * boot : 1);
+      if (inspecting) v = Math.max(v * (0.4 + 0.6 * Math.random()), flashK);
+      segMats[i].color.copy(dark).lerp(hot, v);
+      if (flashK > 0) segMats[i].color.lerp(tmp.setHex(0xff1030), flashK);
+    }
+    traceM.color.setHex(0xff2bd6).multiplyScalar((0.55 + 0.45 * Math.sin(now * 5)) * glow * (reloading ? 0.2 + 0.8 * boot : 1) + flashK);
+    accent.color.copy(hot).lerp(tmp.setHex(0xff1030), flashK);
+    // the skull
+    skull.visible = skullK > 0.02;
+    if (skull.visible) {
+      const gl = inspecting && T >= 0.54 && T < 0.72;
+      skull.position.set(gl ? (Math.random() - 0.5) * 0.008 : 0, 0.060 + 0.075 * skullK, 0.010);
+      skull.scale.set(skullK, skullK * (gl ? 0.6 + Math.random() * 0.6 : 1), skullK);
+      skM.color.setHex(gl && Math.random() < 0.5 ? 0x2bf0ff : 0xff1030);
+      rings.forEach((r, i) => { r.rotation.z = now * (1.2 + i); r.scale.setScalar(1 + 0.12 * Math.sin(now * 6 + i)); });
+    }
+    // the screen
+    screen.scale.setScalar(uiScale); screen.position.set(screen._home.x - 0.018 * (uiScale - 1), screen._home.y + 0.050 * (uiScale - 1), screen._home.z);
+    screen.material.opacity = 0.95 * (1 - 0.55 * S.aim);
+    if (!dx) return;
+    if (line) {
+      const key = line[0] + line[2] + (line[3] > 0 ? Math.floor(now * 20) : '');
+      if (key !== shown) { shown = key; paintText(line[0], line[1], line[2], line[3]); }
+      return;
+    }
+    const mag = (typeof currentWeapon !== 'undefined' && currentWeapon && currentWeapon.mag) || 25, am = (typeof ammo === 'number') ? ammo : mag;
+    let label = 'AMMO', col = am <= mag * 0.25 ? '#ff1030' : '#ff2bd6', big = String(Math.max(0, am)).padStart(2, '0'), bar = Math.max(0, Math.min(1, am / mag)), tear = 0;
+    if (reloading) { label = 'REBOOT'; big = T < 0.7 ? '--' : String(Math.round(boot * 99)).padStart(2, '0'); bar = T < 0.7 ? 0 : boot; col = '#2bf0ff'; }
+    else if (S.heat > 0.3) {
+      label = S.heat > 0.88 ? 'SYSTEM ERROR' : S.heat > 0.6 ? 'UNSTABLE' : 'OVERRIDE';
+      col = S.heat > 0.88 ? '#ff1030' : S.heat > 0.6 ? '#ff4a2a' : '#ffb020';
+      big = big.split('').map(c => Math.random() < S.heat * 0.7 ? '#@%&$X?!'[Math.floor(Math.random() * 8)] : c).join('');
+      tear = S.heat;
+    }
+    const key = label + '|' + big + '|' + Math.round(bar * 16) + col;
+    if (tear > 0 ? now - lastPaint > 0.06 : key !== shown) { shown = key; lastPaint = now; paint(label, big, bar, col, tear); }
+  };
+  reset();
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+// 🪩 Flamethrower -> DISCO INFERNO. A portable nightclub: a chrome wand with purple and pink trim, a low-poly disco ball on a stem over the barrel (square mirror tiles that flash colours), a speaker box on each
+// side, and a clear fuel tank of glowing liquid with bubbles in it. The flames are the ordinary flames (their glow is pink); the muzzle throws confetti squares and the speakers pulse. Hold the trigger
+// and four spotlights unfold round the nozzle and sweep. Reload: the ball stops, the lights go out, the tank slides off and a new one slides in, and the club boots back up. Inspect is DISCO FEVER: the
+// gun tips up, the ball rises and spins hard over a floor of flashing squares, the speakers bounce twice, and the ball drops back with a CLUNK. Nothing here touches the flames' damage or range.
+function buildDiscoInferno() {
+  const g = new THREE.Group();
+  const chrome = new THREE.MeshPhongMaterial({ color: 0xe4e8f4, shininess: 240, specular: 0xffffff, flatShading: true });
+  const chromeD = new THREE.MeshPhongMaterial({ color: 0x8a90aa, shininess: 160, specular: 0xdde4ff, flatShading: true });
+  const purple = new THREE.MeshPhongMaterial({ color: 0x7a2aff, emissive: 0x24085a, shininess: 140, specular: 0xd0a0ff, flatShading: true });
+  const pink = new THREE.MeshPhongMaterial({ color: 0xff2bb0, emissive: 0x501038, shininess: 140, specular: 0xffa0e0, flatShading: true });
+  const blk = new THREE.MeshPhongMaterial({ color: 0x14101c, shininess: 60, specular: 0x5a4a7a, flatShading: true });
+  const glass = new THREE.MeshPhongMaterial({ color: 0xcdeeff, transparent: true, opacity: 0.30, shininess: 220, specular: 0xffffff, depthWrite: false, flatShading: true });
+  const PAL = [0xff2bb0, 0x2bf0ff, 0xffe24a, 0x9a4aff, 0xffffff, 0x4aff9a].map(c => new THREE.MeshBasicMaterial({ color: c }));
+  const OFF = new THREE.MeshBasicMaterial({ color: 0x2a2438 });
+  const addGlow = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  // ── The wand: the Flamethrower's, in chrome ──
+  gpCyl(g, chrome, 0.021, 0.021, 0.300, 10, 0, 0.014, -0.070);
+  for (let i = 0; i < 5; i++) gpCyl(g, purple, 0.0218, 0.0218, 0.006, 10, 0, 0.014, -0.150 + i * 0.038);
+  gpCyl(g, chromeD, 0.028, 0.028, 0.050, 10, 0, 0.014, -0.244);                    // burner head
+  for (let i = 0; i < 6; i++) gpBox(g, pink, 0.008, 0.008, 0.048, Math.cos(i / 6 * Math.PI * 2) * 0.026, 0.014 + Math.sin(i / 6 * Math.PI * 2) * 0.026, -0.244);
+  gpCyl(g, chrome, 0.020, 0.020, 0.012, 10, 0, 0.014, -0.272);
+  gpCyl(g, blk, 0.0145, 0.0145, 0.014, 8, 0, 0.014, -0.276);
+  const pilotMat = new THREE.MeshBasicMaterial({ color: 0xff7ad8, transparent: true, opacity: 0.9 });
+  const pilot = new THREE.Mesh(new THREE.ConeGeometry(0.007, 0.030, 6), pilotMat); pilot.rotation.x = -Math.PI / 2; pilot.position.set(0.020, 0.030, -0.286); g.add(pilot);
+  gpCyl(g, chromeD, 0.0032, 0.0032, 0.100, 5, 0.020, 0.030, -0.230);
+  gpPlate(g, blk, [[0.040, -0.008], [0.070, -0.022], [0.074, -0.096], [0.044, -0.110], [0.020, -0.048], [0.018, -0.012]], 0.036, 0);   // pistol grip
+  for (let i = 0; i < 3; i++) gpBox(g, pink, 0.038, 0.004, 0.030, 0, -0.050 - i * 0.015, 0.058 + i * 0.002 , 0.0, 0, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 4, 8, Math.PI * 1.05), chromeD);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.018, 0.022); g.add(guard);
+  gpBox(g, pink, 0.005, 0.016, 0.005, 0, -0.008, 0.022, 0.2);
+  gpBox(g, blk, 0.022, 0.052, 0.026, 0, -0.028, -0.120, -0.24);                    // forward handle
+  for (let i = 0; i < 3; i++) gpBox(g, purple, 0.023, 0.005, 0.024, 0, -0.016 - i * 0.014, -0.116 - i * 0.004, -0.24);
+  // ── The disco ball on its stem ──
+  const BALL_Y = 0.088, BALL_Z = -0.140, BR = 0.024;
+  const stem = new THREE.Group(); stem.position.set(0, 0.040, BALL_Z); g.add(stem);
+  gpCyl(stem, chromeD, 0.0035, 0.0035, 0.036, 5, 0, 0.018, 0, 0, 0);
+  gpCyl(g, purple, 0.009, 0.011, 0.010, 8, 0, 0.040, BALL_Z, 0, 0);                // the mount
+  const ball = new THREE.Group(); ball.position.set(0, BALL_Y, BALL_Z); g.add(ball);
+  ball.add(new THREE.Mesh(new THREE.IcosahedronGeometry(BR * 0.97, 1), chromeD));
+  const tiles = [], up = new THREE.Vector3(0, 0, 1);
+  const addTile = (d, p) => {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.0115, 0.0115, 0.003), PAL[p % 6]);
+    t.position.copy(d).multiplyScalar(BR); t.quaternion.setFromUnitVectors(up, d); ball.add(t); tiles.push({ t, p });
+  };
+  addTile(new THREE.Vector3(0, 1, 0), 0); addTile(new THREE.Vector3(0, -1, 0), 3);
+  for (let k = 1; k <= 4; k++) {
+    const th = Math.PI * k / 5, n = Math.max(4, Math.round(9 * Math.sin(th)));
+    for (let j = 0; j < n; j++) { const ph = (j + (k % 2) * 0.5) / n * Math.PI * 2; addTile(new THREE.Vector3(Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph)), k * 2 + j); }
+  }
+  // ── The speakers ──
+  const speakers = [-1, 1].map(sd => {
+    const sp = new THREE.Group(); sp.position.set(sd * 0.037, 0.016, -0.185); g.add(sp);
+    gpBox(sp, chrome, 0.018, 0.040, 0.054, 0, 0, 0);
+    gpBox(sp, blk, 0.0192, 0.034, 0.048, 0, 0, 0);
+    gpBox(g, chromeD, 0.014, 0.006, 0.020, sd * 0.0275, 0.004, -0.185);                // arm to the barrel
+    const cones = [];
+    cones.push(gpCyl(sp, pink, 0.0125, 0.0095, 0.004, 8, sd * 0.0100, -0.007, 0, 0, Math.PI / 2));
+    cones.push(gpCyl(sp, PAL[1], 0.0050, 0.0040, 0.004, 6, sd * 0.0100, 0.0125, 0, 0, Math.PI / 2));
+    gpBox(sp, purple, 0.019, 0.003, 0.054, 0, 0.0215, 0);
+    return { sp, cones, home: sp.position.clone(), sd };
+  });
+  // ── The fuel tank: glass, glowing liquid, bubbles ──
+  const tank = new THREE.Group(); tank._home = new THREE.Vector3(0.040, 0.034, 0.060); tank.position.copy(tank._home); g.add(tank);
+  gpCyl(tank, glass, 0.019, 0.019, 0.130, 8, 0, 0, 0);
+  const liquidM = new THREE.MeshBasicMaterial({ color: 0xff2bb0, transparent: true, opacity: 0.85 });
+  gpCyl(tank, liquidM, 0.0148, 0.0148, 0.118, 8, 0, 0, 0);
+  for (const z of [-0.066, 0.066]) gpCyl(tank, chrome, 0.021, 0.021, 0.012, 8, 0, 0, z);
+  for (const z of [-0.030, 0.030]) gpCyl(tank, purple, 0.0205, 0.0205, 0.006, 8, 0, 0, z);
+  gpCyl(tank, pink, 0.006, 0.006, 0.010, 6, 0, 0.0225, 0.040, 0, 0);               // the filler cap
+  const bubbles = [0, 1, 2, 3, 4].map(i => { const b = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.004, 0.004), PAL[4]); b.position.set((i % 2 - 0.5) * 0.008, 0, -0.045 + i * 0.022); tank.add(b); return b; });
+  gpBox(g, chromeD, 0.020, 0.006, 0.018, 0.031, 0.012, 0.060);                      // bracket
+  gpBox(g, chromeD, 0.018, 0.006, 0.012, 0.030, 0.026, -0.010); gpCyl(g, chromeD, 0.0045, 0.0045, 0.020, 5, 0.026, 0.020, -0.010, 0, Math.PI / 2);   // feed line to the wand
+  // ── Four spotlights round the nozzle ──
+  const ring = new THREE.Group(); ring.position.set(0, 0.014, -0.236); g.add(ring);
+  const spots = [0, 1, 2, 3].map(i => {
+    const a = i * Math.PI / 2 + Math.PI / 4, hinge = new THREE.Group(); hinge.position.set(Math.cos(a) * 0.031, Math.sin(a) * 0.031, 0); hinge.rotation.z = a - Math.PI / 2; ring.add(hinge);
+    const arm = new THREE.Group(); hinge.add(arm);
+    gpCyl(arm, chromeD, 0.0035, 0.0085, 0.024, 6, 0, 0, -0.012);
+    gpCyl(arm, PAL[i + 1], 0.0075, 0.0075, 0.002, 6, 0, 0, -0.0245);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.020, 0.13, 8, 1, true), addGlow([0xff2bb0, 0x2bf0ff, 0xffe24a, 0x4aff9a][i], 0.24));
+    beam.rotation.x = Math.PI / 2; beam.position.z = -0.0245 - 0.065; beam.visible = false; arm.add(beam);
+    return { hinge, arm, beam };
+  });
+  // ── The dance floor the inspect throws down ──
+  const floor = new THREE.Group(); floor.position.set(0, -0.075, -0.170); floor.visible = false; g.add(floor);
+  const fl = [];
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) {
+    const m = new THREE.MeshBasicMaterial({ color: 0xff2bb0, transparent: true, opacity: 0.9 });
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.043, 0.002, 0.043), m); t.position.set((i - 2.5) * 0.048, 0, (j - 2.5) * 0.048); floor.add(t); fl.push({ t, m, i, j });
+  }
+  // ── Confetti the muzzle throws ──
+  const confetti = [];
+  for (let i = 0; i < 24; i++) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.007, 0.002), PAL[i % 6]); c.visible = false; g.add(c); confetti.push({ c, v: new THREE.Vector3(), life: 0 }); }
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.038, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff2bb0 }));
+  flash.visible = false; flash.position.set(0, 0.014, -0.300); g.add(flash);
+  g._flash = flash; g._kickZ = 0.004; g._greebled = true; g._handDetailed = true;
+  g.traverse(o => { if (o.isMesh) o.userData.noSmooth = true; });
+  // ── Motion ──
+  const S = { shot: 0, fireT: 0, sus: 0, spin: 0, rise: 0, lights: 1, floorK: 0, hop: 0, pulse: 0, ringA: 0, queued: 0 };
+  const smooth = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+  const col = new THREE.Color();
+  let nextShimmer = 0, clunked = false, ci = 0;
+  const reset = () => {
+    Object.assign(S, { shot: 0, fireT: 0, sus: 0, rise: 0, lights: 1, floorK: 0, hop: 0, pulse: 0, queued: 0 });
+    ball.position.y = BALL_Y; stem.scale.y = (BALL_Y - BR - 0.040) / 0.036; floor.visible = false;
+    tank.position.copy(tank._home); tank.rotation.set(0, 0, 0); tank.visible = true;
+    speakers.forEach(s => { s.sp.position.copy(s.home); s.cones.forEach(c => c.scale.setScalar(1)); });
+    spots.forEach(s => { s.arm.rotation.x = 0; s.beam.visible = false; });
+    confetti.forEach(c => { c.life = 0; c.c.visible = false; });
+    tiles.forEach(t => { t.t.material = PAL[t.p % 6]; });
+    liquidM.color.setHex(0xff2bb0); liquidM.opacity = 0.85; clunked = false;
+  };
+  g._calm = reset;
+  g._steamShot = () => {                                                         // the muzzle-blast hook: one per flame
+    S.shot = 1; flash.material.color.copy(PAL[(ci++) % 6].color);
+    if ((ci & 1) === 0) S.queued = Math.min(6, S.queued + 1);
+  };
+  g._S = S; g._ball = ball; g._stem = stem; g._tank = tank; g._speakers = speakers; g._spots = spots; g._ring = ring; g._floor = floor; g._tiles = tiles; g._liquid = liquidM; g._confetti = confetti; g._off = OFF;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { reset(); return; }
+    const inspecting = !!(g._inspectMode && g._reloadStart), reloading = !!(g._reloadStart && !g._inspectMode);
+    const T = g._reloadStart ? Math.max(0, Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || (inspecting ? 2600 : 3200)))) : 0;
+    S.shot = Math.max(0, S.shot - dt / 0.12);
+    if (S.shot > 0) S.fireT += dt; else S.fireT = Math.max(0, S.fireT - dt * 1.5);
+    S.sus = smooth(0.7, 1.5, S.fireT);
+    let lights = 1, rise = 0, floorK = 0, hop = 0, spin = 1.2 + 3.0 * S.sus * (S.shot > 0 ? 1 : 0);
+    if (reloading) {                                                             // lights out, tank off, tank on, boot
+      lights = T < 0.72 ? 1 - smooth(0.0, 0.12, T) : smooth(0.72, 0.92, T);
+      const out = smooth(0.14, 0.42, T), inn = smooth(0.46, 0.74, T);
+      if (T < 0.44) { tank.position.set(tank._home.x + 0.14 * out, tank._home.y - 0.09 * out, tank._home.z + 0.02 * out); tank.rotation.z = -0.5 * out; tank.visible = out < 0.98; }
+      else { tank.position.set(tank._home.x, tank._home.y, tank._home.z + 0.12 * (1 - inn)); tank.rotation.z = 0; tank.visible = true; }
+      spin = 1.2 * lights;
+    } else { tank.position.copy(tank._home); tank.rotation.z = 0; tank.visible = true; }
+    if (inspecting) {                                                            // DISCO FEVER
+      const t = T;
+      rise = smooth(0.14, 0.26, t) * (1 - smooth(0.78, 0.86, t));
+      floorK = smooth(0.24, 0.36, t) * (1 - smooth(0.76, 0.84, t));
+      spin = 1.2 + 16 * smooth(0.18, 0.30, t) * (1 - smooth(0.80, 0.88, t));
+      const h1 = t > 0.48 && t < 0.58 ? Math.sin((t - 0.48) / 0.10 * Math.PI) : 0, h2 = t > 0.62 && t < 0.72 ? Math.sin((t - 0.62) / 0.10 * Math.PI) : 0;
+      hop = Math.max(h1, h2);
+      if (t >= 0.86 && !clunked) { clunked = true; try { playSoundEvent('foundry_clang', { volume: 0.5, pitch: 0.8, minGap: 100 }); } catch (e) {} }
+    } else if (T === 0) clunked = false;
+    S.lights = lights; S.rise = rise; S.floorK = floorK; S.hop = hop;
+    S.pulse = Math.max(S.shot * (0.5 + 0.5 * Math.sin(now * 25)), hop);
+    // the ball: it rises on its stem, spins, and every few frames its tiles take new colours
+    ball.position.y = BALL_Y + 0.055 * rise; stem.scale.y = Math.max(0.05, (ball.position.y - BR - 0.040) / 0.036);
+    ball.rotation.y += dt * spin; ball.rotation.x = 0.12 * Math.sin(now * 1.3);
+    if (now >= nextShimmer) {
+      nextShimmer = now + 0.11;
+      const step = Math.floor(now * 9), flashWhite = inspecting && T >= 0.86 && T < 0.90;
+      for (const t of tiles) t.t.material = flashWhite ? PAL[4] : (lights < 0.2 || (lights < 0.9 && (t.p + step) % 3 === 0) ? OFF : PAL[(t.p + step) % 6]);
+    }
+    // speakers
+    for (const s of speakers) {
+      s.sp.position.y = s.home.y + 0.014 * hop;
+      const k = 1 + 0.35 * S.pulse * lights; s.cones.forEach(c => c.scale.setScalar(k));
+    }
+    // the tank
+    col.setHSL((now * 0.15) % 1, 1, 0.55).multiplyScalar(0.12 + 0.88 * lights); liquidM.color.copy(col); liquidM.opacity = 0.35 + 0.5 * lights;
+    bubbles.forEach((b, i) => { b.position.y = (((now * 0.35 * (0.6 + i * 0.25) + i * 0.37) % 1) - 0.5) * 0.024; b.visible = lights > 0.3; });
+    // the spotlights unfold and sweep
+    const unfold = S.sus * lights;
+    ring.rotation.z += dt * 2.6 * unfold;
+    spots.forEach((s, i) => { s.arm.rotation.x = 0.75 * unfold; s.beam.visible = unfold > 0.15; if (s.beam.visible) s.beam.material.opacity = 0.26 * unfold * (0.75 + 0.25 * Math.sin(now * 14 + i * 1.7)); });
+    pilot.scale.setScalar(0.85 + 0.25 * Math.sin(now * 17)); pilotMat.color.setHSL((now * 0.3) % 1, 1, 0.65);
+    // the dance floor
+    floor.visible = floorK > 0.02;
+    if (floor.visible) {
+      floor.scale.set(floorK, 1, floorK);
+      for (const f of fl) { col.setHSL((now * 0.5 + (f.i + f.j) * 0.09) % 1, 1, 0.55); f.m.color.copy(col); f.m.opacity = 0.9 * floorK * (0.35 + 0.65 * Math.max(0, Math.sin(now * 9 + (f.i * 7 + f.j * 3)))); }
+    }
+    // confetti out of the muzzle
+    while (S.queued > 0) {
+      S.queued--;
+      const c = confetti.find(q => q.life <= 0); if (!c) break;
+      c.life = 0.45 + Math.random() * 0.2; c.c.visible = true; c.c.position.set((Math.random() - 0.5) * 0.01, 0.014 + (Math.random() - 0.5) * 0.01, -0.292);
+      c.v.set((Math.random() - 0.5) * 0.35, (Math.random() - 0.3) * 0.30, -0.9 - Math.random() * 0.6);
+    }
+    for (const c of confetti) if (c.life > 0) {
+      c.life -= dt; if (c.life <= 0) { c.c.visible = false; continue; }
+      c.c.position.addScaledVector(c.v, dt); c.c.rotation.x += dt * 9; c.c.rotation.y += dt * 7; c.c.scale.setScalar(Math.min(1, c.life / 0.2));
+    }
+  };
+  reset();
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildWidowmaker() {
+  // 🕷️ Crossbow -> WIDOWMAKER. A mechanical spider that is also a crossbow: eight jointed legs folded along its sides. Aim and the front four unfold into the bow
+  // arms while the rear four spread; a shot snaps the front legs in and they reset; a reload sends a little spider crawling along the rail with the next bolt; inspect
+  // stands it on its legs and walks it across the view.
+  const g = new THREE.Group();
+  const blk = new THREE.MeshPhongMaterial({ color: 0x0e0e12, shininess: 150, specular: 0x7a4a4a });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x1c1c22, shininess: 80, specular: 0x555555 });
+  const red = new THREE.MeshPhongMaterial({ color: 0xc41418, emissive: 0x3c0204, shininess: 120, specular: 0xff9a9a });
+  const glow = new THREE.MeshBasicMaterial({ color: 0xff2a2a });
+  gpPlate(g, blk, [
+    [-0.250,0.004],[-0.240,0.020],[0.040,0.022],[0.070,0.014],[0.140,0.016],
+    [0.176,-0.004],[0.170,-0.038],[0.096,-0.042],[0.062,-0.030],[0.030,-0.086],
+    [-0.004,-0.088],[0.004,-0.030],[-0.238,-0.014],
+  ], 0.034, 0);
+  gpBox(g, dark, 0.026, 0.010, 0.330, 0, 0.026, -0.090);                       // flight rail
+  gpBox(g, red, 0.008, 0.006, 0.330, 0, 0.030, -0.090);                        // red groove
+  gpBox(g, blk, 0.054, 0.032, 0.060, 0, 0.016, -0.236);                        // the carapace the front legs hang from
+  gpBox(g, red, 0.010, 0.006, 0.052, 0, 0.034, -0.236);
+  for (const x of [-0.016, -0.006, 0.006, 0.016]) gpBox(g, glow, 0.006, 0.006, 0.004, x, 0.024, -0.268);     // a row of eyes
+  for (const x of [-0.021, 0.021]) gpBox(g, glow, 0.008, 0.010, 0.004, x, 0.014, -0.267);
+  gpBox(g, red, 0.014, 0.003, 0.014, 0, 0.0235, -0.150, 0, Math.PI / 4, 0);   // the hourglass on the back: two diamonds
+  gpBox(g, red, 0.008, 0.003, 0.008, 0, 0.0235, -0.128, 0, Math.PI / 4, 0);
+  gpBox(g, red, 0.008, 0.003, 0.008, 0, 0.0235, -0.172, 0, Math.PI / 4, 0);
+  const bolt = new THREE.Group(); bolt.position.set(0, 0.034, -0.126); g.add(bolt);
+  gpCyl(bolt, dark, 0.0038, 0.0038, 0.180, 8, 0, 0, 0);
+  gpCyl(bolt, red, 0.0075, 0.0028, 0.026, 6, 0, 0, -0.100);                    // broadhead
+  [0, 1, 2].forEach(i => gpBox(bolt, red, 0.0035, 0.012, 0.020, 0, 0, 0.084, (i * Math.PI * 2) / 3));
+  g._bolt = bolt;
+  gpOptic(g, 0, 0.060, 0.010, 0.075, 0.012, 0.038);
+  gpBox(g, dark, 0.025, 0.004, 0.018, 0, 0.040, 0.010);
+  gpPlate(g, blk, [[0.036,-0.028],[0.058,-0.048],[0.060,-0.096],[0.036,-0.104],[0.020,-0.056],[0.018,-0.032]], 0.028, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0032, 6, 12, Math.PI * 1.05), dark);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.032, -0.004); g.add(guard);
+  gpBox(g, red, 0.005, 0.014, 0.005, 0, -0.024, -0.004, 0.2);
+  gpBox(g, blk, 0.024, 0.044, 0.030, 0, -0.026, -0.152);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.272); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  // The eight legs. Each is three segments on hinges: root (yaw + lift), j2, j3. Angles are for the right side; the left side mirrors them.
+  const LEN = [0.075, 0.080, 0.072], LEN_BOW = [0.092, 0.094, 0.084], ATTACH = [-0.240, -0.214, -0.112, -0.062];     // (the front pair are longer and heavier: they are the bow's limbs)
+  const legs = [];
+  const seg = (parent, len, w) => { const m = new THREE.Mesh(new THREE.BoxGeometry(len, w, w), blk); m.position.x = len / 2; parent.add(m); return m; };
+  const knob = (parent, r) => { const k = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), red); parent.add(k); return k; };
+  for (const sd of [1, -1]) for (let row = 0; row < 4; row++) {
+    const root = new THREE.Group(), j2 = new THREE.Group(), j3 = new THREE.Group();
+    root.position.set(sd * 0.030, 0.016, ATTACH[row]);
+    const LR = row === 0 ? LEN_BOW : LEN, thick = row === 0 ? 1.4 : 1;
+    seg(root, LR[0], 0.013 * thick); knob(root, 0.0105);
+    j2.position.x = LR[0]; root.add(j2); seg(j2, LR[1], 0.011 * thick); knob(j2, 0.0085);
+    j3.position.x = LR[1]; j2.add(j3); seg(j3, LR[2], 0.0085 * thick); knob(j3, 0.007);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.022, 6), red); tip.rotation.z = -Math.PI / 2; tip.position.x = LR[2] + 0.008; j3.add(tip);
+    g.add(root); legs.push({ root, j2, j3, sd, row, LR, p: null });
+  }
+  //            yaw    turn2  turn3  lift1  lift2  lift3
+  const FOLD = [[0.12, 0.46, 0.88, 0.00, 0.00, 0.00], [-1.50, 2.9, -2.9, 0.10, 0.40, -0.40], [-1.55, 2.9, -2.9, 0.04, 0.35, -0.35], [-1.60, 2.9, -2.9, 0.10, 0.40, -0.40]];
+  const AIM  = [[0.10, 0.50, 0.95, 0.00, 0.00, 0.00], [0.00, 0.58, 0.85, 0.12, 0.00, 0.00], [-0.55, -0.45, 0.80, 0.12, 0.25, -0.85], [-0.85, -0.40, 0.75, 0.16, 0.25, -0.85]];
+  const CRAWL = [[0.50, 0.45, 0.70, 0.25, 0.20, -0.90], [0.10, 0.45, 0.60, 0.25, 0.20, -0.90], [-0.40, -0.35, 0.60, 0.25, 0.20, -0.90], [-0.80, -0.40, 0.60, 0.25, 0.20, -0.90]];
+  const apply = (L, p) => {
+    L.root.rotation.set(0, L.sd > 0 ? p[0] : Math.PI - p[0], p[3]);
+    L.j2.rotation.set(0, L.sd > 0 ? p[1] : -p[1], p[4]);
+    L.j3.rotation.set(0, L.sd > 0 ? p[2] : -p[2], p[5]);
+    L.p = p;
+  };
+  const mix = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+  const smooth = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+  legs.forEach(L => apply(L, FOLD[L.row]));
+  // The string: from the tip of each front limb back to the latch -- a V that goes straight, snapping forward, when the bolt leaves. This and the limbs are what make it a crossbow.
+  const stringMat = new THREE.MeshBasicMaterial({ color: 0xff3a3a });
+  const strings = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.0035, 1), stringMat); g.add(m); return m; });
+  const NOCK = new THREE.Vector3(0, 0.034, -0.045);
+  const tipOf = L => {
+    const p = L.p, lr = L.LR, a1 = p[0], a2 = p[0] + p[1], a3 = a2 + p[2];
+    const dx = lr[0] * Math.cos(a1) + lr[1] * Math.cos(a2) + lr[2] * Math.cos(a3);
+    const dz = -(lr[0] * Math.sin(a1) + lr[1] * Math.sin(a2) + lr[2] * Math.sin(a3));
+    return new THREE.Vector3(L.root.position.x + L.sd * dx, 0.026, L.root.position.z + dz);
+  };
+  const frontLegs = legs.filter(L => L.row === 0);
+  const placeString = snap => {
+    frontLegs.forEach((L, i) => {
+      const a = tipOf(L), b = new THREE.Vector3(0, NOCK.y, NOCK.z + (a.z - NOCK.z) * Math.min(1, snap * 1.5)), d = b.clone().sub(a);
+      strings[i].position.copy(a).addScaledVector(d, 0.5); strings[i].scale.z = Math.max(0.001, d.length());
+      strings[i].rotation.set(0, Math.atan2(d.x, d.z), 0);
+    });
+  };
+  placeString(0);
+  // The little spider that brings the next bolt.
+  const crawler = new THREE.Group(); crawler.visible = false; g.add(crawler);
+  const cBody = new THREE.Mesh(new THREE.SphereGeometry(0.010, 8, 6), blk); cBody.scale.set(1, 0.7, 1.4); crawler.add(cBody);
+  const cDot = new THREE.Mesh(new THREE.SphereGeometry(0.0035, 6, 5), glow); cDot.position.set(0, 0.004, -0.012); crawler.add(cDot);
+  const cLegs = [];
+  for (const sd of [1, -1]) for (let i = 0; i < 3; i++) {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.0025, 0.0025), red);
+    l.position.set(sd * 0.012, -0.002, (i - 1) * 0.008); crawler.add(l); cLegs.push({ l, sd, i });
+  }
+  const cBolt = new THREE.Group(); cBolt.position.y = 0.012; crawler.add(cBolt);
+  gpCyl(cBolt, dark, 0.0030, 0.0030, 0.130, 6, 0, 0, 0); gpCyl(cBolt, red, 0.0055, 0.0022, 0.020, 6, 0, 0, -0.075);
+  let aimK = 0, fireK = 0, boltOut = false, wasReloading = false;
+  const calm = () => {
+    legs.forEach(L => apply(L, FOLD[L.row])); placeString(0);
+    crawler.visible = false; bolt.visible = true; aimK = 0; fireK = 0; boltOut = false; wasReloading = false;
+  };
+  g._calm = calm; g._legs = legs; g._crawler = crawler; g._string = strings;
+  g._steamShot = () => { fireK = 1; boltOut = true; bolt.visible = false; };     // the muzzle-blast hook: the front legs snap in as the bolt goes
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { calm(); return; }
+    const inspecting = !!(g._inspectMode && g._reloadStart), reloading = !!(g._reloadStart && !g._inspectMode);
+    aimK += ((isADS ? 1 : 0) - aimK) * Math.min(1, dt * 7);
+    fireK = Math.max(0, fireK - dt / 0.18);
+    let crawl = 0, phase = now * 14;
+    if (inspecting) { const t = Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || 2400)); crawl = smooth(0.14, 0.26, t) * (1 - smooth(0.80, 0.92, t)); }
+    const snap = fireK * fireK;
+    for (const L of legs) {
+      let p = mix(FOLD[L.row], AIM[L.row], aimK);
+      if (crawl > 0) {
+        p = mix(p, CRAWL[L.row], crawl);
+        const w = Math.sin(phase + (L.row + (L.sd > 0 ? 0 : 2)) * 1.6);       // a walk: alternate legs lift and swing
+        p = p.slice(); p[0] += 0.20 * w * crawl; p[4] += 0.22 * Math.max(0, w) * crawl;
+      }
+      if (L.row === 0 && snap > 0) { p = p.slice(); p[0] -= 0.30 * snap; p[2] += 0.90 * snap; }     // the limbs snap in
+      apply(L, p);
+    }
+    placeString(snap);
+    if (reloading) {                                                            // the crawler walks the bolt along the rail
+      if (!wasReloading) { wasReloading = true; bolt.visible = false; }
+      const t = Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || 1200));
+      const run = smooth(0.08, 0.62, t);
+      crawler.visible = t > 0.06 && t < 0.82;
+      crawler.position.set(0, 0.052, 0.17 - run * 0.30);
+      const out = smooth(0.62, 0.82, t);
+      crawler.scale.setScalar(Math.max(0.01, 1 - out)); cBolt.visible = t < 0.62;
+      cLegs.forEach(c => { c.l.rotation.y = Math.sin(now * 30 + c.i * 2 + (c.sd > 0 ? 0 : 3)) * 0.5; });
+      if (t >= 0.62) { bolt.visible = true; boltOut = false; }
+    } else if (wasReloading) { wasReloading = false; crawler.visible = false; bolt.visible = true; boltOut = false; }
+  };
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildGravitysEnd() {
+  // 🪐 Bow -> GRAVITY'S END. A bow that bends space instead of a string: two angular crescent arms of black metal float apart round a tiny black hole that sits just above your hand,
+  // violet rings orbiting it, a glowing tether running back from it. Aim and the arms swing round to face you as one great ring; a shot stretches the hole back along the tether, collapses
+  // it to a point and flashes while the arms are flung outward, and gravity pulls them in again. Inspect: the arms come off and orbit the hole as a disk, the hole swallows the whole bow,
+  // a white flash, BOOM, and every part is thrown back out into place. Nothing here touches the arrow's flight or its damage.
+  const g = new THREE.Group();
+  const metal = new THREE.MeshPhongMaterial({ color: 0x0c0c12, shininess: 150, specular: 0x6a4aa0, flatShading: true });
+  const edge = new THREE.MeshPhongMaterial({ color: 0x2a1c44, shininess: 90, specular: 0x9a7ad0, flatShading: true });
+  const violet = new THREE.MeshBasicMaterial({ color: 0x9a4aff });
+  const addGlow = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const C = new THREE.Vector3(0, 0.050, 0.100);                                    // the black hole
+  // A low-poly riser and the same grip as the plain Bow, so the hands sit where they always did.
+  gpPlate(g, metal, [[0.052,0.034],[0.030,0.046],[0.008,0.016],[0.006,-0.016],[0.030,-0.046],[0.052,-0.034],[0.042,0.000]], 0.022, 0);
+  gpBox(g, edge, 0.020, 0.018, 0.070, 0, 0.000, -0.030);
+  gpPlate(g, metal, [[0.062,-0.006],[0.086,-0.020],[0.088,-0.084],[0.060,-0.096],[0.040,-0.046],[0.038,-0.010]], 0.030, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 4, 8, Math.PI * 1.05), edge);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.016, 0.046); g.add(guard);
+  gpBox(g, violet, 0.005, 0.015, 0.005, 0, -0.008, 0.046, 0.2);
+  // The arrow: dark shaft, a dark head, violet rings round it and violet fins.
+  const arrow = new THREE.Group(); g.add(arrow);
+  gpCyl(arrow, metal, 0.0045, 0.0045, 0.300, 6, 0, 0, -0.056);
+  gpCyl(arrow, edge, 0.0150, 0.0020, 0.036, 6, 0, 0, -0.222);
+  for (const z of [-0.080, -0.120, -0.160]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0016, 4, 10), addGlow(0x9a4aff, 0.85)); r.position.z = z; arrow.add(r); }
+  for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; gpBox(arrow, violet, 0.003, 0.022, 0.026, Math.cos(a) * 0.010, Math.sin(a) * 0.010, 0.084, 0, 0, a); }
+  const pullables = g.children.slice();                                            // everything above is what the hole swallows in the inspect
+  // The two arms, as segments laid on a ring that stands in the plane of the bow (turned to face you when you aim).
+  const ring = new THREE.Group(); ring.position.copy(C); g.add(ring);
+  const N = 6, arms = [0, 1].map(a => {
+    const segs = [];
+    for (let i = 0; i < N; i++) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), i % 2 ? metal : edge); ring.add(m);
+      segs.push({ m, u: -1 + (2 * i + 1) / N });
+    }
+    const rune = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.012, 0.012), violet); ring.add(rune);
+    return { segs, rune };
+  });
+  // The black hole: a low-poly core, a faint shell, rings at different tilts, three flat lensing rings facing you, a flash.
+  const bh = new THREE.Group(); bh.position.copy(C); g.add(bh);
+  bh.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.026, 1), new THREE.MeshBasicMaterial({ color: 0x000000 })));
+  bh.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.038, 0), addGlow(0x7a3aff, 0.20)));
+  const orbit = [[0.052, 0x9a4aff, 0.2, 0.0], [0.068, 0xd05aff, -0.9, 1.1], [0.086, 0x6a3aff, 0.7, 2.0]].map(([r, c, tilt, ph]) => {
+    const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.0024, 4, 16), addGlow(c, 0.9)); t.userData = { tilt, ph, spd: 1.4 + r * 8 }; bh.add(t); return t;
+  });
+  const lens = [0.09, 0.125, 0.165].map(r => { const m = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.003, 20), addGlow(0x9a4aff, 0.22)); m.position.copy(C); g.add(m); return m; });
+  const flare = new THREE.Mesh(new THREE.IcosahedronGeometry(0.02, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+  flare.position.copy(C); flare.visible = false; g.add(flare);
+  const shock = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.004, 4, 18), addGlow(0xe8d0ff, 0)); shock.position.copy(C); shock.visible = false; g.add(shock);
+  const tether = new THREE.Mesh(new THREE.BoxGeometry(0.0036, 0.0036, 1), addGlow(0xb06aff, 0.85)); g.add(tether);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 5), new THREE.MeshBasicMaterial({ color: 0xb06aff }));
+  flash.visible = false; flash.position.set(0, 0, -0.230); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  // ── Motion ───────────────────────────────────────────────────────────────
+  const S = { aimK: 0, half: 0.85, R: 0.15, tilt: 0, spin: 0, pull: 0, bhz: 1, bhxy: 1, rc: 0, tether: 0.12 };
+  const homes = new Map();
+  const smooth = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+  let fireAge = 9, arrowOut = false, wasReloading = false, t0 = 0;
+  const layArms = () => {
+    ring.rotation.set(S.tiltX || 0, S.tilt, 0);
+    arms.forEach((arm, a) => {
+      const base = a * Math.PI + S.spin;
+      arm.segs.forEach(({ m, u }) => {
+        const phi = base + u * S.half, w = (0.034 * (1 - Math.pow(Math.abs(u), 1.6)) + 0.010) * (1 - S.pull * 0.9);
+        m.position.set(0, S.R * Math.cos(phi), S.R * Math.sin(phi)); m.rotation.set(phi, 0, 0);
+        m.scale.set(0.011, Math.max(0.001, w), Math.max(0.001, S.R * 2 * S.half / N * 1.12));
+      });
+      arm.rune.position.set(0.0, S.R * Math.cos(base) * 0.995, S.R * Math.sin(base) * 0.995); arm.rune.rotation.x = base; arm.rune.scale.setScalar(Math.max(0.001, 1 - S.pull));
+    });
+  };
+  const layBH = () => {
+    bh.scale.set(S.bhxy, S.bhxy, S.bhz);
+    tether.position.set(0, C.y - 0.020, C.z + S.tether / 2 + 0.01); tether.scale.z = Math.max(0.01, S.tether); tether.rotation.x = 0.16;
+  };
+  const reset = () => {
+    Object.assign(S, { half: 0.85, R: 0.15, tilt: 0, tiltX: 0, spin: 0, pull: 0, bhz: 1, bhxy: 1, rc: 0, tether: 0.12 });
+    for (const c of pullables) { const h = homes.get(c); if (h) { c.position.copy(h.p); c.scale.copy(h.s); c.visible = h.v; } }
+    flare.visible = false; shock.visible = false; fireAge = 9; if (!arrowOut) arrow.visible = true;
+    layArms(); layBH();
+  };
+  g._calm = () => { S.aimK = 0; arrowOut = false; arrow.visible = true; reset(); };
+  g._steamShot = () => { fireAge = 0; arrowOut = true; arrow.visible = false; };
+  g._arms = arms; g._S = S; g._pullables = pullables; g._bh = bh; g._flare = flare; g._arrow = arrow; g._ring = ring;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { g._calm(); return; }
+    if (!homes.size) for (const c of pullables) homes.set(c, { p: c.position.clone(), s: c.scale.clone(), v: c.visible });
+    const inspecting = !!(g._inspectMode && g._reloadStart), reloading = !!(g._reloadStart && !g._inspectMode);
+    S.aimK += ((isADS && !inspecting ? 1 : 0) - S.aimK) * Math.min(1, dt * 8);
+    fireAge += dt;
+    // aim: the arms swing round to face you and close into a ring; the hole swells (its core pulls in so it never sits in the crosshair)
+    const e = fireAge;
+    const rc = e < 0.08 ? e / 0.08 : Math.exp(-(e - 0.08) * 5.5);                  // the arms are flung out, then gravity brings them back
+    S.rc = e < 1.2 ? rc : 0;
+    let bhz = 1, bhxy = 1, tetherLen = 0.12;
+    if (e < 0.12) { const k = e / 0.12; bhz = 1 + 1.6 * k; bhxy = 1 - 0.25 * k; tetherLen = 0.12 + 0.12 * k; }              // the hole is drawn back along the tether
+    else if (e < 0.22) { const k = (e - 0.12) / 0.10; bhz = 2.6 * (1 - k) + 0.3 * k; bhxy = 0.75 * (1 - k) + 0.3 * k; tetherLen = 0.24 * (1 - k) + 0.12 * k; }   // and collapses to a point
+    else if (e < 0.6) { const k = smooth(0.22, 0.6, e); bhz = 0.3 + 0.7 * k; bhxy = 0.3 + 0.7 * k; }
+    const aimScale = 1 + 0.35 * S.aimK;
+    S.R = (0.15 + 0.02 * S.aimK) * (1 + 0.5 * S.rc);
+    S.half = (0.85 + 0.70 * S.aimK) + 0.25 * S.rc;
+    S.tilt = S.aimK * Math.PI / 2; S.tiltX = 0;
+    S.spin = 0; S.pull = 0;
+    S.bhz = bhz * aimScale * (1 - 0.35 * S.aimK); S.bhxy = bhxy * aimScale * (1 - 0.35 * S.aimK); S.tether = tetherLen;
+    if (inspecting) {
+      const t = Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || 2400));
+      const detach = smooth(0.00, 0.10, t), orbitT = smooth(0.10, 0.50, t), swallow = smooth(0.50, 0.66, t), gone = smooth(0.66, 0.78, t);
+      const rebuild = smooth(0.84, 1.00, t);
+      S.pull = swallow * (1 - rebuild);                                          // drawn in, held as nothing, then thrown back out
+      S.R = 0.15 * (1 + 0.35 * detach) * (1 - 0.96 * S.pull);
+      S.spin = Math.PI * 2.6 * orbitT * (1 - S.pull);
+      S.half = 0.85 + 0.35 * orbitT;
+      S.tilt = Math.PI * 0.40 * orbitT * (1 - S.pull); S.tiltX = 0.9 * orbitT * (1 - S.pull);   // the arms lie down into a disk
+      S.bhz = S.bhxy = (1 + 1.6 * swallow * (1 - gone)) * (1 - 0.85 * gone * (1 - rebuild));      // it swells as it swallows, then shrinks to a point
+      flare.visible = t > 0.70 && t < 0.92;
+      if (flare.visible) { const k = smooth(0.70, 0.78, t) + 3.2 * smooth(0.78, 0.84, t); flare.scale.setScalar(0.4 + k * 1.4); flare.material.opacity = 1 - smooth(0.84, 0.92, t); }
+      shock.visible = t > 0.78 && t < 0.95;
+      if (shock.visible) { const k = smooth(0.78, 0.95, t); shock.scale.setScalar(0.5 + 4.5 * k); shock.material.opacity = 0.9 * (1 - k); }
+      for (const c of pullables) {                                              // everything on the bow is drawn into the hole, then thrown back out
+        const h = homes.get(c); if (!h) continue;
+        const k = S.pull, back = rebuild > 0 ? 1 + 0.12 * Math.sin(rebuild * Math.PI) : 1;
+        c.position.copy(h.p).lerp(C, k); c.scale.copy(h.s).multiplyScalar(Math.max(0.001, (1 - k) * back));
+        c.visible = h.v && k < 0.995;
+      }
+      tether.visible = S.pull < 0.6;
+    } else {
+      for (const c of pullables) { const h = homes.get(c); if (h) { c.position.copy(h.p); c.scale.copy(h.s); if (c !== arrow) c.visible = h.v; } }
+      flare.visible = e > 0.12 && e < 0.34;
+      if (flare.visible) { const k = (e - 0.12) / 0.22; flare.scale.setScalar(0.6 + 2.2 * Math.sin(Math.min(1, k * 1.4) * Math.PI)); flare.material.opacity = 1 - k; }
+      shock.visible = false; tether.visible = true;
+      if (reloading) { if (!wasReloading) wasReloading = true; const t = Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || 525)); if (t > 0.55) { arrow.visible = true; arrowOut = false; } }
+      else if (wasReloading) { wasReloading = false; arrow.visible = true; arrowOut = false; }
+      if (!arrowOut) arrow.visible = true;
+    }
+    layArms(); layBH();
+    orbit.forEach((o, i) => { o.rotation.set(o.userData.tilt + Math.sin(now * 0.7 + i) * 0.15, now * o.userData.spd * 0.4, o.userData.ph + now * o.userData.spd); });
+    lens.forEach((m, i) => { const k = 1 + 0.10 * Math.sin(now * 1.6 + i * 1.3); m.scale.setScalar(k * (1 + 0.5 * S.aimK) * Math.max(0.05, 1 - S.pull)); m.material.opacity = (0.16 + 0.22 * S.aimK) * (1 - S.pull); });
+  };
+  reset();
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+// 🃏 Throwing Knives -> HOUSE OF CARDS. Razor-edged steel playing cards with silver borders and glowing red suits: a fan of three (your knives) with a fourth, the ace of spades, floating above them.
+// Each throw riffles the rest into new places like a deck being worked. The inspect is the Impossible Shuffle: the whole deck is thrown up, splits into two streams that spiral round each other and
+// interleave, four cards fly out and stop in the air as the four aces, snap together into one throwing knife, and the knife drops into your hand. CLACK.
+const _cardTexs = {};
+function _cardTex(kind) {                                                      // kind: 'back' or a suit letter S H C D; null where there is no canvas (the card is then plain steel)
+  if (_cardTexs[kind] !== undefined) return _cardTexs[kind];
+  let tex = null;
+  try {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 192;
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 128, 192); g.addColorStop(0, '#1a1a24'); g.addColorStop(1, '#07070b');
+    x.fillStyle = g; x.fillRect(0, 0, 128, 192);
+    x.strokeStyle = '#b8bec8'; x.lineWidth = 7; x.strokeRect(5, 5, 118, 182);
+    x.strokeStyle = '#6a707a'; x.lineWidth = 2; x.strokeRect(14, 14, 100, 164);
+    if (kind === 'back') {
+      x.strokeStyle = '#a01824'; x.lineWidth = 3;
+      for (let i = -192; i < 192; i += 24) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 192, 192); x.stroke(); x.beginPath(); x.moveTo(i + 192, 0); x.lineTo(i, 192); x.stroke(); }
+      x.fillStyle = '#ff2a3a'; x.beginPath(); x.moveTo(64, 70); x.lineTo(84, 96); x.lineTo(64, 122); x.lineTo(44, 96); x.closePath(); x.fill();
+    } else {
+      const sym = { S: '♠', H: '♥', C: '♣', D: '♦' }[kind] || '♠';
+      x.shadowColor = '#ff2a3a'; x.shadowBlur = 14; x.fillStyle = '#ff3a48';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = 'bold 92px serif'; x.fillText(sym, 64, 100);
+      x.font = 'bold 30px serif'; x.fillText('A', 26, 34); x.fillText(sym, 26, 62);
+      x.save(); x.translate(102, 158); x.rotate(Math.PI); x.fillText('A', 0, 0); x.fillText(sym, 0, 28); x.restore();
+    }
+    tex = new THREE.CanvasTexture(c);
+  } catch (e) { tex = null; }
+  return (_cardTexs[kind] = tex);
+}
+const _cardMats = {};
+function _cardMaterials(kind) {                                                // +x -x +y(front) -y(back) +z -z
+  if (_cardMats[kind]) return _cardMats[kind];
+  const edge = new THREE.MeshPhongMaterial({ color: 0xc4cad4, shininess: 160, specular: 0xffffff });
+  const face = new THREE.MeshPhongMaterial(_cardTex(kind) ? { map: _cardTex(kind), shininess: 110, specular: 0x886666 } : { color: 0x14141c, shininess: 110, specular: 0x886666 });
+  const back = new THREE.MeshPhongMaterial(_cardTex('back') ? { map: _cardTex('back'), shininess: 90 } : { color: 0x14141c, shininess: 90 });
+  return (_cardMats[kind] = [edge, edge, face, back, edge, edge]);
+}
+const _cardGeo = () => _cardGeo.g || (_cardGeo.g = new THREE.BoxGeometry(0.040, 0.0018, 0.064));
+function _makeCard(kind) { return new THREE.Mesh(_cardGeo(), _cardMaterials(kind)); }
+function buildHouseOfCards() {
+  let ammo = null, extra = null, deck = null, knife = null;
+  const g = _throwableHolder(gg => {
+    ammo = new THREE.Group(); ammo._n = 3; gg.add(ammo);
+    ['S', 'H', 'C'].forEach((k, n) => { const c = _makeCard(k); c.userData.slot = n - 1; ammo.add(c); });
+    extra = _makeCard('S'); gg.add(extra);                                      // the ace that floats above the fan
+    deck = new THREE.Group(); deck.visible = false; gg.add(deck);               // the whole deck, only while you inspect
+    for (let i = 0; i < 12; i++) deck.add(_makeCard(i < 4 ? 'SHCD'[i] : 'back'));
+    knife = new THREE.Group(); knife.visible = false; gg.add(knife);            // what the four aces become
+    const steel = new THREE.MeshPhongMaterial({ color: 0xc4cad4, shininess: 160, specular: 0xffffff }), cord = new THREE.MeshPhongMaterial({ color: 0x23242a, shininess: 26 });
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.004, 0.130), steel); blade.position.z = -0.075; knife.add(blade);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.052, 4), steel); tip.rotation.x = -Math.PI / 2; tip.rotation.z = Math.PI / 4; tip.scale.set(1, 1, 0.25); tip.position.z = -0.164; knife.add(tip);
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.014, 0.080), cord); handle.position.z = 0.038; knife.add(handle);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.0056, 0.100), new THREE.MeshBasicMaterial({ color: 0xff2a3a })); stripe.position.z = -0.075; knife.add(stripe);
+  });
+  g._parts = Object.assign(g._parts || {}, { ammo });
+  g._greebled = true; g._handDetailed = true;
+  // ── Motion ───────────────────────────────────────────────────────────────
+  const slotPose = (k, lift = 0) => ({ x: k * 0.026, y: 0.040 - Math.abs(k) * 0.004 + lift, z: -0.030, ry: k * 0.36, rz: k * 0.10 });
+  const homeExtra = { x: 0, y: 0.078, z: -0.046 };
+  const ease = t => t * t * (3 - 2 * t), clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const win = (t, a, b) => clamp((t - a) / (b - a));
+  let shuf = { t: 9 }, inspRun = 0, beats = 0;
+  const CENTER = new THREE.Vector3(-0.14, 0.10, -0.08);                          // where the four aces hang, centred in your view
+  const place = (c, x, y, z, rx, ry, rz) => { c.position.set(x, y, z); c.rotation.set(rx, ry, rz); };
+  const layFan = (now) => {
+    ammo.children.forEach(c => {
+      let a = c.userData.slot, b = a, u = 1;
+      if (shuf.t < 0.30) { u = ease(shuf.t / 0.30); a = shuf.from[c.userData.slot + 1]; b = c.userData.slot; }
+      const pa = slotPose(a), pb = slotPose(b), lift = 0.036 * Math.sin(Math.PI * u) * (shuf.t < 0.30 ? 1 : 0);
+      const bob = 0.004 * Math.sin(now * 1.8 + c.userData.slot * 1.7);
+      place(c, pa.x + (pb.x - pa.x) * u, pa.y + (pb.y - pa.y) * u + lift + bob, pa.z, shuf.t < 0.30 ? Math.sin(Math.PI * u) * 1.2 : 0, pa.ry + (pb.ry - pa.ry) * u, pa.rz + (pb.rz - pa.rz) * u);
+    });
+    place(extra, homeExtra.x, homeExtra.y + 0.005 * Math.sin(now * 1.5), homeExtra.z, 0.18, 0, 0.04 * Math.sin(now * 1.1));
+  };
+  g._calm = () => { deck.visible = false; knife.visible = false; extra.visible = true; shuf = { t: 9 }; };
+  g._steamShot = () => {                                                         // a throw: the rest of the fan is shuffled into new places
+    const from = []; ammo.children.forEach(c => { from[c.userData.slot + 1] = c.userData.slot; });
+    ammo.children.forEach(c => { const old = c.userData.slot; c.userData.slot = old >= 1 ? -1 : old + 1; from[c.userData.slot + 1] = old; });
+    shuf = { t: 0, from };
+  };
+  g._cards = { ammo, extra, deck, knife };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { g._calm(); layFan(now); return; }
+    shuf.t += dt;
+    const inspecting = !!(g._inspectMode && g._reloadStart);
+    if (!inspecting) {
+      if (deck.visible || knife.visible) { deck.visible = false; knife.visible = false; extra.visible = true; }
+      inspRun = 0; layFan(now); return;
+    }
+    // ── The Impossible Shuffle ────────────────────────────────────────────────
+    const t = clamp((Date.now() - g._reloadStart) / (g._reloadDur || 2400));
+    if (inspRun !== g._reloadStart) { inspRun = g._reloadStart; beats = 0; }
+    ammo.children.forEach(c => { c.visible = false; }); extra.visible = false; deck.visible = true;
+    const toss = win(t, 0.00, 0.12), split = win(t, 0.12, 0.40), join = win(t, 0.40, 0.52), shoot = win(t, 0.52, 0.62), snap = win(t, 0.78, 0.88), land = win(t, 0.88, 1.00);
+    const X = CENTER.x, top = 0.14;
+    deck.children.forEach((c, i) => {
+      const s = i / 11, stream = i % 2, th = stream * Math.PI + 4 * s + 6.5 * split;
+      const r = 0.045 * split * (1 - join);
+      let x = X * ease(toss) + Math.cos(th) * r;
+      let y = top * ease(toss) + 0.02 * s + 0.025 * Math.sin(th * 0.5) * split * (1 - join);
+      let z = -0.05 * ease(toss) + Math.sin(th) * r;
+      let rx = 3 * toss * (1 - split) + 1.0 * split * (1 - join), ry = th * split * (1 - join), rz = 0.3 * Math.sin(th * 1.3) * split * (1 - join);
+      y += (top + i * 0.0022 - y) * join;                                        // interleaved: one stack
+      if (i < 4) {                                                                // an ace: it flies out of the deck and stays, facing you
+        const tx = CENTER.x + (i - 1.5) * 0.052, ty = CENTER.y, tz = CENTER.z;
+        const k = ease(shoot), hold = t >= 0.62 && t < 0.78 ? 0.004 * Math.sin(now * 3 + i) : 0;
+        x += (tx - x) * k; y += (ty - y) * k + hold; z += (tz - z) * k;
+        rx += (Math.PI / 2 - rx) * k; ry *= (1 - k); rz *= (1 - k);
+        const s2 = ease(snap);                                                    // then the four slide together and shrink into the knife
+        x += (CENTER.x - x) * s2; y += (CENTER.y - y) * s2; c.scale.setScalar(Math.max(0.001, 1 - s2 * 0.95));
+        c.visible = snap < 0.97;
+      } else {
+        c.scale.setScalar(Math.max(0.001, 1 - ease(shoot)));
+        c.visible = shoot < 0.98;
+      }
+      c.position.set(x, y, z); c.rotation.set(rx, ry, rz);
+    });
+    // the aces become one knife, which drops into your hand
+    knife.visible = snap > 0.4 && land < 1;
+    if (knife.visible) {
+      const k = ease(win(snap, 0.4, 1)), d = ease(land);
+      knife.position.set(CENTER.x * (1 - d), CENTER.y * (1 - d) + 0.02, CENTER.z * (1 - d));
+      knife.rotation.set(Math.PI / 2 * (1 - d), 0, 0);                            // upright in the air, level by the time it is in your hand
+      knife.scale.setScalar(Math.max(0.001, k));
+    }
+    if (beats < 1 && t >= 0.12) { beats = 1; _itemInspectBeat(900, 0.16); }
+    if (beats < 2 && t >= 0.52) { beats = 2; _itemInspectBeat(1100, 0.22); }
+    if (beats < 3 && t >= 0.80) { beats = 3; _itemInspectBeat(760, 0.34); setTimeout(() => _itemInspectBeat(1500, 0.14), 60); }     // snap
+    if (beats < 4 && t >= 0.985) { beats = 4; _itemInspectBeat(520, 0.40); }                                                   // CLACK
+  };
+  layFan(0);
   return g;
 }
 
@@ -38998,8 +39871,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   const run = clamp01((rig.speedSmooth - 3.5) / 7.5);
 
   // Advance phase by distance travelled so stride length stays natural.
-  // ×2.75 (half of the old ×5.5) so the LEG GRAPHIC swings 2× slower than the
-  // distance covered — purely cosmetic, does not change actual move speed.
+  // ×1.6 (it was ×2.75, and ×5.5 before that) so the LEG GRAPHIC swings slower than the
+  // distance covered — purely cosmetic, does not change actual move speed. At a walk (about 7.3 m/s)
+  // that is 1.9 full strides a second; ×2.75 was 3.2, which read as legs spinning.
   // Which way is this body actually going, relative to the way it faces? `dist`
   // is a magnitude, so the cycle only ever ran forwards — someone back-pedalling
   // out of a fight walked at you while sliding away. Measured in a live duel
@@ -39010,7 +39884,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // neither — holds the last direction instead of chattering between the two.
   const along = dist > 0 ? (dx * Math.sin(mesh.rotation.y) + dz * Math.cos(mesh.rotation.y)) / dist : 0;
   if (Math.abs(along) > 0.35) rig.gaitDir = along > 0 ? 1 : -1;
-  rig.phase += dist * 2.75 * (rig.gaitStride ?? 1) * (rig.gaitDir ?? 1);
+  rig.phase += dist * 1.6 * (rig.gaitStride ?? 1) * (rig.gaitDir ?? 1);
   if (!moving) {
     // Standing still clears the direction latch. Without this, "back-pedal out
     // of a fight, then circle-strafe" left the legs cycling in reverse for every
@@ -39228,14 +40102,14 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     // The arms hang off the chest, so a chest laid back by SLIDE_BACK carries them with it: an armed body adds the
     // difference back so the gun still points where it did (the old slide had the chest at -0.40), and a body with
     // empty hands props itself on them behind its hips.
-    const SLIDE_BACK = -0.82, SLIDE_GUN_FIX = -0.40 - SLIDE_BACK;
+    const SLIDE_BACK = -1.30, SLIDE_GUN_FIX = -0.40 - SLIDE_BACK;     // (lying back further now: the arms of an armed body make up the difference)
     const armLT = rig.holdsGun ? SUP.x - 0.16 * sl + SLIDE_GUN_FIX * sl + aim * 0.55 * (1 - rk)
                                : pose(-1.05, -0.8, 1.05);
     const armRT = rig.holdsGun ? (rig.firePose ? rig.firePose.x : GUN_HOLD.shoulderX) + 0.12 * sl + SLIDE_GUN_FIX * sl + aim * 0.55
                                : pose(-1.38, -0.8, 0.95);
     rig.armL.rotation.x = L(rig.armL.rotation.x, armLT, w);
     rig.armR.rotation.x = L(rig.armR.rotation.x, armRT, w);
-    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0, -0.82), w);
+    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0, SLIDE_BACK), w);
     rig.head.rotation.x  = L(rig.head.rotation.x, pose(-0.12, -0.10, 0.02), w);
     const elbLT = rig.holdsGun ? SUP.ex : pose(-0.85, -0.7, -1.05);
     const elbRT = rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : pose(-0.9, -0.7, -1.15);
@@ -39248,31 +40122,14 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // deliberate athletic hop instead of the standing pose floating upward.
   if (jump > 0.01) {
     const j = jump * (1 - slide * 0.35);
-    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, -0.72, j);
-    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, -0.54, j);
-    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, 1.05, j);
-    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, 0.95, j);
-    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, rig.holdsGun ? SUP.x - 0.12 : -0.52, j);
-    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, rig.holdsGun ? (rig.firePose ? rig.firePose.x : GUN_HOLD.shoulderX) : -0.72, j);
-    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, rig.holdsGun ? SUP.ex : -0.82, j);
-    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : -0.92, j);
     rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.34, j);
     rig.head.rotation.x = THREE.MathUtils.lerp(rig.head.rotation.x, -0.18, j);
-    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, -0.12, j);
-    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, -0.10, j);
   }
 
   // Landing: both knees give at once, the hips drop and the chest folds over
   // them. Applied last so it reads on top of whatever pose is underneath.
   if (land > 0.004) {
-    const L = land * 0.9;
-    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, 0.95, L);
-    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, 0.88, L);
-    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, -0.42, L);
-    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, -0.38, L);
-    rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.26, L);
-    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, -0.22, L);
-    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, -0.20, L);
+    rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.26, land * 0.9);     // no knees to give: the chest folds a little
   }
 
   // ── Spine and gaze ────────────────────────────────────────────────────────
@@ -39328,6 +40185,36 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     if (rig.kneeR) rig.kneeR.rotation.x += 0.22 * e;
     rig.hitK *= Math.exp(-dt * 7);
   } else if (rig.hitK) { rig.hitK = 0; rig.hitT = 0; }
+
+  // ── Simple limbs ──────────────────────────────────────────────────────────
+  // No elbows and no knees: a leg is one straight piece that swings from the hip, an arm one straight piece that swings from the shoulder.
+  //   walking -- an arm goes forward as the opposite leg goes forward, and back again
+  //   crouch  -- a low staggered stance: one leg forward, one back, the hips dropped between them (the feet planting below finds the height)
+  //   slide   -- lying back, legs straight out in front, arms held clear of the floor
+  //   jump    -- the legs hang and do not move; the arms rise over the head
+  // An armed body keeps its arms exactly as the weapon pose wants them, in the air too (the weapon is held by them), and only its legs change.
+  {
+    const L = THREE.MathUtils.lerp;
+    const jj = jump * (1 - slide * 0.35), crc = ck * (1 - sl), stp = crc * 0.4;
+    let lL = swing, lR = swingR;
+    lL = L(lL, -1.05 + swing * stp, crc);  lR = L(lR, 0.95 + swingR * stp, crc);
+    lL = L(lL, -1.42, sl);                 lR = L(lR, -1.48, sl);
+    lL = L(lL, 0, jj);                     lR = L(lR, 0, jj);
+    rig.legL.rotation.x = lL; rig.legR.rotation.x = lR;
+    if (rig.kneeL) rig.kneeL.rotation.x = 0;
+    if (rig.kneeR) rig.kneeR.rotation.x = 0;
+    if (rig.footL) rig.footL.rotation.x = L(-lL, 0.2, sl);                // soles flat on the floor; on its back the toes point up a little
+    if (rig.footR) rig.footR.rotation.x = L(-lR, 0.2, sl);
+    if (!rig.holdsGun) {
+      let aL = gait(p + Math.PI) * armAmp, aR = gait(p) * armAmp;
+      aL = L(aL, -0.25, crc);  aR = L(aR, -0.25, crc);
+      aL = L(aL, -0.55, sl);   aR = L(aR, -0.55, sl);
+      aL = L(aL, -2.9, jj);    aR = L(aR, -2.9, jj);
+      rig.armL.rotation.x = aL; rig.armR.rotation.x = aR;
+      if (rig.elbowL) rig.elbowL.rotation.x = 0;
+      if (rig.elbowR) rig.elbowR.rotation.x = 0;
+    }
+  }
 
   // ── Foot planting, and the bob that falls out of it ──────────────────────
   // The old rig's boot soles floated 0.225 m above the ground, so the body
@@ -44365,6 +45252,7 @@ function startMatchFinale(winner) {
     f.victim = finaleActor(clip.victim, f.replay, false);
     const hitGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(.85, 1.85, .65));
     f.hitbox = new THREE.LineSegments(hitGeo, new THREE.LineBasicMaterial({ color: 0xff5555, transparent: true, opacity: .75 }));
+    f.hitbox.visible = false;                                        // the hitbox is not for players to see
     f.replay.add(f.hitbox);
     f.trail = new THREE.Group(); f.replay.add(f.trail);
     // One shared cylinder shape, a white core and a deliberately excessive light sleeve.
@@ -48115,7 +49003,7 @@ function tryMelee() {
     }
     break;
   }
-  spawnHitParticle(hitPos || camera.position.clone().addScaledVector(forward, Math.min(item.range, 1.6)));
+  if (hitPos) spawnHitParticle(hitPos);   // a miss leaves no flash at the end of your reach
 }
 
 // Items that use arc (grenade) physics instead of straight bullets
@@ -50635,6 +51523,21 @@ const MODEL_SKINS = [
   { id: 'deagle_glitch', weapon: 'desert_eagle', name: 'Glitch Deagle', rarity: 'rare',
     sw: ['#0a0a10', '#ff2bd6'], build: buildGlitchDeagle,
     blurb: 'Teleports together when drawn. Every so often, a piece is somewhere it should not be.' },
+  { id: 'vector_neon_anarchy', weapon: 'vector', name: 'NEON//ANARCHY', rarity: 'legendary',
+    sw: ['#0b0b10', '#ff2bb0'], build: buildNeonAnarchy,
+    blurb: 'A rogue hacker\'s prototype, built lopsided on purpose: bare circuitry and a coil on the side you see, overlapping armour and hazard labels on the other. Aim and the side panels slide back; fire and the blocks shuttle and neon races along the deck while the hologram counter corrupts (OVERRIDE, UNSTABLE, SYSTEM ERROR). Inspect is SYSTEM HIJACK: a red skull, UNAUTHORIZED USER DETECTED, ACCESS GRANTED.' },
+  { id: 'flamethrower_disco_inferno', weapon: 'flamethrower', name: 'DISCO INFERNO', rarity: 'rare',
+    sw: ['#e4e8f4', '#ff2bb0'], build: buildDiscoInferno,
+    blurb: 'A nightclub with a pilot light. A disco ball spins over the barrel, the speakers pulse, confetti flies out with the flames, and hold the trigger and four spotlights unfold and sweep. Reload swaps the glowing tank; inspect is DISCO FEVER.' },
+  { id: 'crossbow_widowmaker', weapon: 'crossbow', name: 'WIDOWMAKER', rarity: 'legendary',
+    sw: ['#0e0e12', '#ff2a2a'], build: buildWidowmaker,
+    blurb: 'A mechanical spider that is also a crossbow. Eight legs fold along its sides; aim and they unfold into the bow arms. A shot snaps the front legs in, a reload sends a little spider crawling along the rail with the next bolt, and inspect stands it up and walks it across your view. Whoever it kills hangs in a giant red web that then shatters.' },
+  { id: 'boombow_gravity_end', weapon: 'boombow', name: "Gravity's End", rarity: 'legendary',
+    sw: ['#0c0c12', '#9a4aff'], build: buildGravitysEnd,
+    blurb: 'A bow that bends space. Two black crescents float round a tiny black hole with violet rings orbiting it; aim and they swing round into a ring, a shot flings them out and gravity pulls them back. Inspect it and it swallows itself, flashes, and rebuilds from a point. The arrow flies as the arrow always did.' },
+  { id: 'throwing_knives_house_of_cards', weapon: 'throwing_knives', name: 'House of Cards', rarity: 'legendary',
+    sw: ['#15151c', '#ff2a3a'], build: buildHouseOfCards,
+    blurb: 'Razor playing cards: black steel, silver borders, glowing red suits. A fan of three with the ace of spades floating over it; every throw shuffles the rest. Inspect it for the Impossible Shuffle. Whoever it kills is shown the ace of spades. The cards throw exactly like the knives.' },
   { id: 'plasma_carbine_fishbowl', weapon: 'plasma_carbine', name: 'Fishbowl Carbine', rarity: 'rare',
     sw: ['#2a8ae8', '#ff7a1a'], build: buildFishbowlCarbine,
     blurb: 'Fills with water when drawn. Three fish live in it.' },
@@ -50818,6 +51721,7 @@ const DONUT_SKIN_IDS = [
 // Mirrors GEN2_SKIN_IDS in server.js (gotcha #4): the server owns the roll and
 // the ownership record, this list only decides what the picker locks.
 const GEN2_MODEL_SKIN_IDS = new Set([
+  'vector_neon_anarchy', 'flamethrower_disco_inferno', 'crossbow_widowmaker', 'boombow_gravity_end', 'throwing_knives_house_of_cards',
   'javelin_katyusha', 'p90_ppsh41',
   'minigun_stormwing',                                          // (no skin is free)
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
@@ -55029,6 +55933,17 @@ const _emoReload = () => _fxR(_RK.emo(),
    RP(.48,'dash','arrive',1,'breech'), RP(.56,'dash','arrive',1,'breech')],
   [[.36,'typing']], 'ding');
 const SKIN_FX = {
+  vector_neon_anarchy: { equip: 'glitch', equipMs: 950, equipSfx: ['glitchsfx', 'snapin'],
+    inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.84, { py: .06, pz: -.04, rx: .22 }), K(.92, { py: .03 }), K(1, {})] },
+  flamethrower_disco_inferno: { equip: 'flip', equipMs: 950, equipSfx: ['whoosh', 'chime'],
+    inspect: [K(.12, { py: .02, rx: -.15 }), K(.26, { py: .05, pz: -.02, rx: -.50 }), K(.80, { py: .05, pz: -.02, rx: -.50 }), K(.88, { py: .03, rx: -.30 }), K(.94, { py: .015, rx: -.08 }), K(1, {})] },
+  crossbow_widowmaker: { equip: 'unfold', equipMs: 1000, equipSfx: ['fold', 'click'],
+    inspect: [K(.14, { py: .012 }), K(.26, { py: .05 }), K(.34, { py: .05, px: -.02, ry: .9 }), K(.54, { py: .05, px: -.17, ry: .9 }), K(.62, { py: .05, px: -.17, ry: -.9 }),
+              K(.80, { py: .05, px: -.01, ry: -.9 }), K(.90, { py: .012 }), K(1, {})] },
+  boombow_gravity_end: { equip: 'blackhole', equipMs: 1200, equipSfx: ['singularity', 'chime'],
+    inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.92, { py: .03 }), K(1, {})] },
+  throwing_knives_house_of_cards: { equip: 'unfold', equipMs: 900, equipSfx: ['fold', 'click'],
+    inspect: [K(.12, { py: .02 }), K(.9, { py: .02 }), K(1, {})] },
   // ── Real guns: the same ammunition, so the gun's own reload, but their voice ──
   aug:                  { sound: _fxS('auto_blast', .22, .075, 0, 0, { action:'water_smg', tail:.18 }) },
   ak20_twin_barrel:     { sound: _fxS('auto_blast', .24, .08, 0, 0, { action:'water_rifle', double:true }) },

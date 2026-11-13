@@ -842,21 +842,14 @@ const WEAPONS = [
     trickShot: { lockTime: 90, range: 72, radius: 0.95, lift: 0.42, delay: 380, stagger: 70, accuracy: 0.45 },
   },
   {
-    // 🚀🔒 Javelin Launcher: hold the crosshair on someone for lockOn.lockTime
-    // (0.25s) and, once locked, [E] dumps the whole magazine as a guided volley
-    // (fireJavelinVolley) — each javelin launches up, then curves in on the
-    // target (updateJavelins). Lock persists through updateJavelinLock as long
-    // as the target stays alive and on screen, independent of where the
-    // crosshair drifts afterward; the crosshair itself turns red while locked
-    // (see #crosshair.locked in index.html). Left-click is disabled (tryShoot's
-    // early guard) — this gun only fires through its ability.
+    // One vertical launch per shot; the missile has its own forward seeker.
     // Strictly P2W: see P2W_ITEM_IDS and the WEAPON_PRICE_MULT tier in WEAPON_COSTS.
     id: 'javelin_launcher', name: 'Javelin Launcher', type: 'Guided Launcher', slot: 'primary',
-    mag: 6, reserve: 36, damage: 30, fireRate: 1400, reloadTime: 3200,
+    mag: 6, reserve: 36, damage: 90, headshotMult: 1, fireRate: 1400, reloadTime: 3200,
     auto: false, pellets: 1, spread: 0, adsZoom: 40, bulletSpeed: 55, noReload: false,
-    bulletColor: 0xffaa33, bulletSize: 0.12, arcShot: true,
-    lockOn: { lockTime: 250, lockRange: 60, homingDelay: 450, homingSpeed: 55, turnRate: 2.6, hitRadius: 1.6 },
-    ability: { name: 'Volley', cd: 500, desc: 'Launch the whole magazine at the locked target', type: 'javelin_volley', noADS: true },
+    bulletColor: 0xffaa33, bulletSize: 0.12, splashRadius: 5, splashDamage: 70, tracking: true,
+    lockOn: { climbHeight: 12, homingSpeed: 55, turnRate: 8, turnAccel: 48, hitRadius: 1.15, range: 70, coneDot: Math.cos(Math.PI / 4) },
+    ability: { name: 'Skystrike', cd: 1400, desc: 'Launch one missile. It climbs, then locks onto enemies it can see.', type: 'javelin_launch', noADS: true },
   },
   {
     // 🔫🔫 Akimbo: two pistols, one in each hand, firing in turn. A sidearm, so it is lean on damage and heavy on
@@ -1931,9 +1924,13 @@ let playerYVel = 0;               // Player vertical velocity (for air grenades 
 // Gravity ×2 off the floaty pass. That is the heaviest the game has ever been —
 // with JUMP_VEL untouched the plain jump lands back on the original 3.0 m, and
 // blast arcs come down fast and hard instead of hanging.
-const GRAVITY       = 24;    // m/s² -> 3.97 m apex, 1.15 s hang (was 31.5, before that 21)
-const JUMP_VEL      = 13.8;  // m/s standing jump -> 3.02 m apex
-const AIR_JUMP_VEL  = 12.3;  // m/s mid-air second jump -> 2.4 m, same ratio as before
+// A jump covers ground for as long as it hangs, 2 x launch speed / gravity. Only GRAVITY is raised (33, 27% less distance); the launch speeds are what they always were.
+// The obstacle course keeps the old gravity (24): its gaps were built for the long jump (see applyJumpTuning, called from selectMode).
+const JUMP_TUNING = { normal: { g: 33, jump: 13.8, air: 12.3 }, obby: { g: 24, jump: 13.8, air: 12.3 } };
+let GRAVITY = JUMP_TUNING.normal.g;     // m/s²
+let JUMP_VEL      = JUMP_TUNING.normal.jump;   // m/s standing jump
+let AIR_JUMP_VEL  = JUMP_TUNING.normal.air;    // m/s mid-air second jump
+function applyJumpTuning(obby) { const k = obby ? JUMP_TUNING.obby : JUMP_TUNING.normal; GRAVITY = k.g; JUMP_VEL = k.jump; AIR_JUMP_VEL = k.air; }
 const DEFAULT_MOVE_MULT = 0.65; // calmer default player/bot ground speed
 const BOT_SPEED_MULT = 1.5 * DEFAULT_MOVE_MULT * 0.65;  // NPCs move 35% slower than the previous bot pace
 const SLIDE_MS      = 1250;  // slide duration (was 800)
@@ -1992,6 +1989,7 @@ function boostBlastCarryOnAirJump() {
 // aim, and the horizontal is left generous, because crossing a gap is the
 // interesting trick.
 const BLAST_MAX_UP    = 24;   // m/s -> about 12 m apex (back to the original height; sideways stays at 75%)
+const BLAST_JUMP_VEL_MULT = Math.sqrt(1.5);   // a grenade / blast jump goes 1.5x as HIGH as it did (1.22x the upward speed; the cap above scales with it)
 const BLAST_MAX_HORIZ = 34.5; // m/s (was 46 originally; 75%)
 const BLAST_UP_BIAS   = 0.55; // minimum upward share (was 0.32): the push goes up more than out, so a blast lifts you higher without sending you further
 
@@ -5878,6 +5876,7 @@ function nearClimbableWall() {
 // 0.25m are well under half of the thinnest wall (plus the player's radius).
 const MAX_MOVE_STEP = 0.25;
 const RAMP_LAUNCH_MAX = 6;    // extra m/s up from a ramp slide-jump, however fast the slide
+const RAMP_JUMP_VEL_MULT = Math.SQRT2;   // a ramp jump goes 2x as HIGH as it did (apex = v^2 / 2g, so 1.414x the upward speed)
 function moveWithWalls(dir, dist) {
   if (!(dist > 0)) return;
   const n = Math.min(120, Math.max(1, Math.ceil(dist / MAX_MOVE_STEP)));
@@ -33826,7 +33825,7 @@ const weaponModels = [
   buildStormBloom(),  // storm_bloom
   buildChainGun(),  // chain_gun
   buildGunslinger(),  // gunslinger
-  buildRPG(),  // javelin_launcher
+  buildJavelinLauncher(),  // javelin_launcher
   buildAkimbo(),  // akimbo
   buildHellfire(),  // hellfire
   buildOmegaPistol(),  // omega_pistol
@@ -42839,6 +42838,7 @@ function doJump(repeat) {
       if (ramp && up > 0.25) {
         const h = Math.hypot(playerVelocity.x, playerVelocity.z);
         slamState.vel += Math.min(RAMP_LAUNCH_MAX, h * ramp.tan * up * 0.3);
+        slamState.vel *= RAMP_JUMP_VEL_MULT;                                           // twice the height of a ramp jump
         spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.6, 0xffcc66);
         playEquipSound('whoosh');
       }
@@ -42861,6 +42861,7 @@ function doJump(repeat) {
     // or halfway back down.
     if (slamState) slamState.vel = AIR_JUMP_VEL;
     else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
+    airTime = 0;   // a double jump starts your air gravity over (it used to keep building: after 1.5 s up the pull doubles every second)
     // Spend the weapon's jump first and keep the blast one in reserve, so
     // riding a charge while holding a light weapon really does leave you two.
     if ((window._airJumpsLeft || 0) > 0) window._airJumpsLeft--;
@@ -44793,6 +44794,7 @@ function quickMelee() {
   if (m.doubleJump && !isPlayerGrounded() && (window._airJumpsLeft || 0) > 0) {
     if (slamState) slamState.vel = AIR_JUMP_VEL;
     else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
+    airTime = 0;   // a double jump starts your air gravity over (it used to keep building: after 1.5 s up the pull doubles every second)
     window._airJumpsLeft--;
     boostBlastCarryOnAirJump();
     spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.2, 0xaaccff);
@@ -46105,7 +46107,7 @@ function updateGrappleRide(dt) {
 
 function updateMovement(dt, socialBlocked = false) {
   if (window.PVP_RAGDOLL?.controlling) return;
-  if (SOCIAL_VIEW.mode && !socialBlocked) {
+  if ((SOCIAL_VIEW.mode || MISSILE_CAM.active) && !socialBlocked) {
     const held = { ...keys };
     for (const k of Object.keys(keys)) keys[k] = false;
     const joystick = joyDir;
@@ -47656,8 +47658,8 @@ function activateAbility() {
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'hellfire_core') { fireHellfireCore(); }
-  else if (ab.type === 'javelin_volley') {
-    fireJavelinVolley(w);
+  else if (ab.type === 'javelin_launch') {
+    tryLaunchJavelin(w);
   }
   else if (ab.type === 'dash') {
     const right = new THREE.Vector3(Math.cos(euler.y), 0, -Math.sin(euler.y));
@@ -47821,127 +47823,396 @@ function makeJavelinMesh() {
 // Fires one round of the volley. Unlocked, it's exactly the same arcShot ballistic
 // bullet every other lobbed weapon uses — lands wherever you aimed, no special code
 // needed. Locked (lockedTargetId set), it's a guided entity of its own.
-function fireJavelin(origin, dir, lockedTargetId, shotIdx) {
-  const spec = currentWeapon.lockOn;
-  const id = `javelin_${myId}_${Date.now()}_${shotIdx || 0}`;
-  if (lockedTargetId) {
-    const launchDir = new THREE.Vector3(dir.x, Math.max(dir.y, 0.55), dir.z).normalize();
-    socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: launchDir.x, dy: launchDir.y, dz: launchDir.z, weapon: 'javelin_launcher' });
-    const mesh = makeJavelinMesh();
-    mesh.position.copy(origin);
-    scene.add(mesh);
-    javelins.push({
-      id, mesh, x: origin.x, y: origin.y, z: origin.z,
-      vx: launchDir.x * spec.homingSpeed, vy: launchDir.y * spec.homingSpeed, vz: launchDir.z * spec.homingSpeed,
-      targetId: lockedTargetId, bornAt: Date.now(), homing: false,
-    });
-    playWeaponSound('javelin_launcher', { baseWeapon: currentWeapon, volume: 1.2 });
-  } else {
-    socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'javelin_launcher' });
-    spawnLocalBullet(origin, dir, id, true, currentWeapon.bulletSpeed, currentWeapon.bulletColor, currentWeapon.bulletSize, 'javelin_launcher');
+function buildJavelinLauncher() {
+  const g=new THREE.Group();
+  const armor=gpFinish(0x58634c,.42,.7,'steel'),steel=gpFinish(0x82929c,.24,.9,'steel');
+  const dark=gpFinish(0x172025,.65,.15,'polymer'),rubber=GUN_MATS.grip();
+  const amber=new THREE.MeshBasicMaterial({color:0xffbc54});
+  // A vertical six-cell launch cassette, with an independent command unit.
+  gpBox(g,armor,.132,.18,.19,0,.04,-.075);
+  gpBox(g,dark,.14,.022,.20,0,-.06,-.075);
+  for(const x of [-.04,0,.04])for(const z of [-.12,-.045]) {
+    gpCyl(g,steel,.018,.018,.15,24,x,.055,z,0);
+    const rim=new THREE.Mesh(new THREE.TorusGeometry(.015,.003,8,24),steel);rim.rotation.x=-Math.PI/2;rim.position.set(x,.134,z);g.add(rim);
+    gpCyl(g,dark,.012,.012,.004,20,x,.128,z,0);
   }
+  gpBox(g,steel,.12,.015,.018,0,.117,-.171);
+  for(const x of [-.069,.069]) {
+    gpBox(g,dark,.012,.105,.12,x,.038,-.075);
+    for(let i=0;i<4;i++)gpBox(g,steel,.002,.006,.07,x*1.1,.006+i*.024,-.075);
+  }
+  gpBox(g,armor,.08,.07,.09,.018,.015,.055);
+  gpBox(g,dark,.053,.04,.008,.018,.022,.104);
+  gpBox(g,amber,.042,.022,.001,.018,.025,.109);
+  for(let i=0;i<3;i++)gpBox(g,dark,.004,.003,.002,.007+i*.011,.025,.11);
+  gpBox(g,rubber,.038,.105,.047,.025,-.095,.045,.18);
+  gpBox(g,steel,.014,.015,.05,.025,-.043,.028);
+  gpBox(g,rubber,.032,.085,.035,-.045,-.087,-.11,-.12);
+  gpBox(g,steel,.085,.013,.035,0,-.05,.087);
+  gpBox(g,dark,.025,.08,.045,0,-.07,.095,-.16);
+  gpCyl(g,steel,.003,.003,.10,12,-.063,.15,.055,0);
+  gpBox(g,amber,.01,.004,.025,.069,.075,-.07);
+  g._flash=makeMuzzleFlash();g._flash.position.set(0,.145,-.08);g.add(g._flash);
+  g._kickZ=.012;g._greebled=true;g._handDetailed=true;g.userData.verticalLaunchCells=6;
+  g.position.set(.12,-.1,-.25);return g;
 }
-// [E]: dumps the whole magazine at once, staggered 90ms apart so they read as a
-// volley rather than one giant overlapping clump. Lock state is captured ONCE here
-// and threaded through to each shot — the player could look away mid-volley and the
-// already-launched javelins should keep tracking what they were actually locked to.
-function fireJavelinVolley(w) {
-  const pool = weaponAmmo[currentWeaponIdx];
-  if (!pool || pool.ammo <= 0) { dryFire(); return; }
-  const shots = pool.ammo;
-  const lockedTargetId = javelinLocked ? javelinLockTargetId : null;
-  const origin = _abilityMuzzleOrigin(new THREE.Vector3(0, -0.10, -0.30));
-  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-  for (let i = 0; i < shots; i++) {
-    setTimeout(() => {
-      if (currentWeapon?.id !== 'javelin_launcher') return; // switched away mid-volley
-      const spreadDir = dir.clone();
-      if (!lockedTargetId) {
-        spreadDir.x += (Math.random() - 0.5) * 0.06;
-        spreadDir.y += (Math.random() - 0.5) * 0.03;
-        spreadDir.normalize();
-      }
-      fireJavelin(origin.clone(), spreadDir, lockedTargetId, i);
-    }, i * 90);
+
+function skinLookById(id) {                                                 // for somebody else's shot: the skin id they sent
+  if (typeof id !== 'string') return null;
+  try { if (!_skinById) _skinById = new Map([...MODEL_SKINS, ...SUPPORT_MODEL_SKINS].map(m => [m.id, m])); return skinLookFor(_skinById.get(id)); } catch (e) { return null; }
+}
+
+function skinLookFor(skin) {                                                // the whole look of a skin's shots: what skin.look says, then the table above, then the default
+  if (!skin || skin.finishOnly) return null;
+  if (_skinLookCache[skin.id]) return _skinLookCache[skin.id];
+  const T = SKIN_SHOT[skin.id] || null, tint = (T && T.tint) || (T && T.shot && T.shot.c[0]) || _skinTintOf(skin);
+  const look = Object.assign({ bulletColor: tint, skinId: skin.id }, skin.look || {});
+  if (T && T.shot && !(skin.look && skin.look.projectile)) look.shot = T.shot;
+  let boom = null;
+  if (look.gearBlast) boom = { gear: true, ring: 0xffba48 };
+  else if (skin.look && skin.look.projectile === 'donut') boom = BOOM_THEMES.glaze;
+  else if (T && T.boom) boom = BOOM_THEMES[T.boom] || null;
+  else if (!T) {                                                              // nothing written for it: an explosive gun bursts in the colour of the skin
+    const w = WEAPONS.find(x => x.id === skin.weapon);
+    if (w && _SKIN_EXPLOSIVE.has(projectileKind(w.id, w))) boom = _boomFromTint(tint);
   }
-  pool.ammo = 0; ammo = 0;
+  look.boom = boom;
+  return _skinLookCache[skin.id] = look;
+}
+
+let _skinById = null;
+
+const BOOM_THEMES = {
+  glaze:    { fire: 0xff78bd, core: 0xfff0f8, smoke: 0xe8a0c0, bits: [0xff78bd, 0xffd27a, 0xc8844a, 0xffffff, 0xff9ac8], bit: 'sprinkle', ring: 0xff9ad0, flash: [255, 120, 190] },
+  hacker:   { fire: 0x1fdc55, core: 0xd4ffe0, smoke: 0x061a0c, bits: [0x2dff6a, 0x0a0a0a, 0x7dffa6], bit: 'cube', ring: 0x2dff6a, flash: [70, 255, 140] },
+  crumbs:   { fire: 0xe8a838, core: 0xfff0c0, smoke: 0xb8935a, bits: [0xe8a838, 0xc0392b, 0xf2c14e, 0x8a5a2a], bit: 'chunk', ring: 0xf2c14e, flash: [255, 200, 90] },
+  soda:     { fire: 0xe8dcc0, core: 0xffffff, smoke: 0xf4f4f4, bits: [0xffffff, 0xcfe8ff, 0xe8c07a], bit: 'ball', ring: 0xffffff, flash: [255, 255, 255] },
+  splash:   { fire: 0x55bbff, core: 0xe8f8ff, smoke: 0xcfeeff, bits: [0x55bbff, 0xaadcff, 0xffffff], bit: 'drop', ring: 0x66ccff, flash: [90, 170, 255], splash: true },   // a water balloon bursting: the water theme, plus the splash
+  water:    { fire: 0x55bbff, core: 0xe8f8ff, smoke: 0xcfeeff, bits: [0x55bbff, 0xaadcff, 0xffffff], bit: 'drop', ring: 0x66ccff, flash: [90, 170, 255] },
+  confetti: { fire: 0xff6ab8, core: 0xffffff, smoke: 0xfff0a0, bits: [0xff4fa8, 0x4ad8ff, 0xffe14a, 0x7aff7a, 0xff8a3a], bit: 'flake', ring: 0xffe14a, flash: [255, 230, 120] },
+  foam:     { fire: 0xf4f8ff, core: 0xffffff, smoke: 0xe0eaf4, bits: [0xffffff, 0xdbe8f5], bit: 'ball', ring: 0xdbe8f5, flash: [230, 240, 255] },
+  ink:      { fire: 0x7a2a8a, core: 0xf0d0f8, smoke: 0x1a0a22, bits: [0x8a2f8f, 0xb04aa0, 0x2a1236, 0xf2c6e8], bit: 'drop', ring: 0xb04aa0, flash: [160, 70, 170] },
+  gravity:  { fire: 0x6a2ac8, core: 0xf0e0ff, smoke: 0x120820, bits: [0x8a4aff, 0x1a0a2a, 0xd0b0ff, 0xd05aff], bit: 'shard', ring: 0x8a4aff, flash: [140, 80, 255] },
+  cards:    { fire: 0xff2a3a, core: 0xffffff, smoke: 0x15151c, bits: [0xff2a3a, 0xf0f2f8, 0x15151c, 0xc4cad4], bit: 'flake', ring: 0xff2a3a, flash: [255, 60, 70] },
+  paint:    { fire: 0xff4fa8, core: 0xffffff, smoke: 0xaa44cc, bits: [0xff4fa8, 0x4ad8ff, 0xffe14a, 0x7aff7a], bit: 'drop', ring: 0xff4fa8, flash: [255, 90, 190] },
+  cyber:    { fire: 0x00f0ff, core: 0xffffff, smoke: 0x2a1a5a, bits: [0x00f0ff, 0xff2bd6, 0xffffff], bit: 'cube', ring: 0xff2bd6, flash: [0, 220, 255] },
+  pixel:    { fire: 0x58d85a, core: 0xffffff, smoke: 0x1a3a1a, bits: [0x58d85a, 0xffffff, 0x2a8a3a, 0xf0e050], bit: 'cube', ring: 0x58d85a, flash: [110, 255, 120] },
+  gears:    { fire: 0xc8a030, core: 0xfff0b0, smoke: 0x6b4a2c, bits: [0xc8a030, 0x8a6a2a, 0xb0b8c0], bit: 'flake', ring: 0xc8a030, flash: [255, 210, 90] },
+  paper:    { fire: 0xf2efe6, core: 0xffffff, smoke: 0xd8d4c8, bits: [0xf2efe6, 0xe74c3c, 0xffffff], bit: 'flake', ring: 0xf2efe6, flash: [255, 250, 235] },
+  music:    { fire: 0xb08aff, core: 0xffffff, smoke: 0x4a3a7a, bits: [0xb08aff, 0xffd24a, 0xffffff], bit: 'ball', ring: 0xffd24a, flash: [190, 150, 255] },
+  ice:      { fire: 0xbdf3ff, core: 0xffffff, smoke: 0xe8fbff, bits: [0xbdf3ff, 0xffffff], bit: 'shard', ring: 0x9ae8ff, flash: [170, 235, 255] },
+  cash:     { fire: 0xe0303a, core: 0xffe8e8, smoke: 0xb87074, bits: [0xe0303a, 0xf08a92, 0xe6d27a, 0xffffff], bit: 'flake', ring: 0xff6666, flash: [255, 90, 90] },
+  orbital:  { fire: 0xff7a1a, core: 0xfff0d0, smoke: 0x34363c, bits: [0xff7a1a, 0xffffff, 0x2a2c32], bit: 'chunk', ring: 0xff9a2a, flash: [255, 150, 60], orbital: true },   // the Orbital Strike launcher: a beam from the sky and a target ring
+  eclipse:  { fire: 0xff2030, core: 0xffd0d4, smoke: 0x0a0406, bits: [0x8c9096, 0x0c0c0e, 0xff2030], bit: 'chunk', ring: 0xff3040, flash: [255, 40, 60], eclipse: true },   // the Eclipse Engine: a black disc and a crimson corona
+  nuke:     { fire: 0xff7a1a, core: 0xfff4c8, smoke: 0x4a4540, bits: [0xff8a2a, 0xffd24a, 0x555048, 0xffffff], bit: 'chunk', ring: 0xff9a2a, flash: [255, 170, 70], mushroom: true },
+  star:     { fire: 0xfff0a0, core: 0xffffff, smoke: 0x4a5a9a, bits: [0xfff0a0, 0x8ab4ff, 0xffffff], bit: 'shard', ring: 0x8ab4ff, flash: [255, 245, 170] },
+};
+
+const _skinLookCache = {};
+
+const _SKIN_EXPLOSIVE = new Set(['rocket', 'grenade']);
+
+function _skinTintOf(skin) {                                                 // the livelier of the two swatch colours
+  let best = 0x9aa4aa, bs = -1;
+  for (const hex of (skin.sw || [])) { const c = new THREE.Color(hex), hsl = { h: 0, s: 0, l: 0 }; c.getHSL(hsl); const score = hsl.s * (0.25 + Math.min(hsl.l, 1 - hsl.l)); if (score > bs) { bs = score; best = c.getHex(); } }
+  return best;
+}
+
+function _boomFromTint(c) {                                                  // a burst in the colour of the skin, for a skin that has none of its own
+  const col = new THREE.Color(c), dark = col.clone().multiplyScalar(0.45), light = col.clone().lerp(new THREE.Color(0xffffff), 0.6);
+  return { fire: col.getHex(), core: 0xffffff, smoke: dark.getHex(), bits: [col.getHex(), light.getHex(), 0xffffff], bit: 'chunk', ring: col.getHex(), flash: [Math.round(col.r * 255), Math.round(col.g * 255), Math.round(col.b * 255)] };
+}
+
+function spawnJavelin(id, origin, skinId, remote = false) {
+  const mesh = makeJavelinMesh();
+  const dir = new THREE.Vector3(0, 1, 0);
+  mesh.position.copy(origin);
+  mesh.quaternion.setFromUnitVectors(_jvFwd, dir);
+  scene.add(mesh);
+  const j = {
+    id, mesh, pos: origin.clone(), dir, omega: new THREE.Vector3(), launchY: origin.y,
+    epoch: matchEpoch, map: activeMapName, bornAt: Date.now(), skinId, remote,
+    speed: projectileWeaponSpec('javelin_launcher').lockOn.homingSpeed, targetId: null, searchIn: 0, netIn: 0,
+  };
+  javelins.push(j);
+  return j;
+}
+function tryLaunchJavelin(w) {
+  const now = Date.now();
+  if (MISSILE_CAM.active || reloading || now - lastShot < w.fireRate) return;
+  if (javelins.some(j => !j.remote && j.epoch === matchEpoch && j.map === activeMapName)) return;
+  const pool = weaponAmmo[currentWeaponIdx];
+  const infinite = adminInfiniteAmmoActive();
+  if (!pool || pool.ammo <= 0 && !infinite) {
+    if (pool?.reserve > 0) startReload();
+    else dryFire();
+    return;
+  }
+  lastShot = now;
+  const origin = _abilityMuzzleOrigin(new THREE.Vector3(0, -0.10, -0.30));
+  const skinId = _activeModelSkin[w.id]?.id;
+  const j = spawnJavelin(`local_${myId}_javelin_${now}`, origin, skinId);
+  j.cruise = new THREE.Vector3(-Math.sin(euler.y), -.5, -Math.cos(euler.y)).normalize();
+  weaponModels[currentWeaponIdx]?._javelinLaunchPose?.();
+  playWeaponSound(w.id, { baseWeapon: w, skinId, volume: 1.2 });
+  if (!infinite) pool.ammo--;
+  ammo = pool.ammo;
   syncHeldAmmoModelForIndex(currentWeaponIdx);
   updateAmmoHUD();
-  flashAbilityName(lockedTargetId ? `VOLLEY · ${shots} LOCKED` : `VOLLEY · ${shots} DUMB-FIRED`);
-  const idx = currentWeaponIdx;
-  setTimeout(() => {
-    if (!reloading && currentWeaponIdx === idx && weaponAmmo[idx]?.ammo <= 0 && weaponAmmo[idx]?.reserve > 0) startReload();
-  }, shots * 90 + 160);
+  if (!infinite && !ammo && pool.reserve > 0) startReload();
 }
 const _javelinRay = new THREE.Ray();
 const _javelinHitPt = new THREE.Vector3();
-// A real 3D segment-vs-wallColliders test (unlike hasLineOfSight, which is a flat
-// X/Z-only check and has no idea a javelin flying 10m up is nowhere near a 3m wall).
-function _javelinBlockedByWall(x1, y1, z1, x2, y2, z2) {
-  const dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
-  const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-  if (dist < 0.001) return false;
-  _javelinRay.origin.set(x1, y1, z1);
-  _javelinRay.direction.set(dx / dist, dy / dist, dz / dist);
+// Use the same 3D segment test for the seeker and the missile's flight.
+function javelinWallDistance(origin, dir, limit) {
+  _javelinRay.origin.copy(origin);
+  _javelinRay.direction.copy(dir);
+  let nearest = Infinity;
   for (const box of wallColliders) {
-    if (_javelinRay.intersectBox(box, _javelinHitPt) && _javelinHitPt.distanceTo(_javelinRay.origin) <= dist + 0.05) return true;
+    if (box.containsPoint(origin)) return 0;
+    if (!_javelinRay.intersectBox(box, _javelinHitPt)) continue;
+    const d = origin.distanceTo(_javelinHitPt);
+    if (d <= limit && d < nearest) nearest = d;
   }
-  return false;
+  return nearest;
 }
-// Guided javelins in flight: a brief straight launch phase (still climbing off the
-// initial upward kick), then homingDelay later they start steering toward wherever
-// the locked target currently is. A wall in the way stops it cold — no damage, just
-// an impact, same as the spec's "unless it hits a wall first."
+function javelinEnemyPosition(pid, mesh, out) {
+  if (pid === myId || !mesh?.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) return null;
+  if (inLobby && !players[pid]?.isDummy) return null;
+  const rig = mesh._rig, z = rig?.hitBodyZ || 0;
+  return out.copy(mesh.position).add(_jvOffset.set(Math.sin(mesh.rotation.y) * z, rig?.hitBodyOff ?? 1, Math.cos(mesh.rotation.y) * z));
+}
+const _jvWant = new THREE.Vector3(), _jvAxis = new THREE.Vector3(), _jvTmp = new THREE.Vector3(), _jvQ = new THREE.Quaternion(), _jvFwd = new THREE.Vector3(0, 0, -1);
+const _jvTarget = new THREE.Vector3(), _jvSight = new THREE.Vector3(), _jvOffset = new THREE.Vector3();
+function removeJavelin(index) {
+  const j=javelins[index];scene.remove(j.mesh);
+  const geometries=new Set(),materials=new Set();j.mesh.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material)materials.add(o.material);});
+  geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());javelins.splice(index,1);
+}
+function acquireJavelinEnemy(j, spec) {
+  let best = null, nearest = spec.range;
+  for (const pid in remoteMeshes) {
+    if (!javelinEnemyPosition(pid, remoteMeshes[pid], _jvTarget)) continue;
+    const sight = _jvSight.copy(_jvTarget).sub(j.pos), distance = sight.length();
+    if (distance < .01 || distance >= nearest) continue;
+    sight.divideScalar(distance);
+    if (j.dir.dot(sight) < spec.coneDot || javelinWallDistance(j.pos, sight, distance) !== Infinity) continue;
+    best = pid; nearest = distance;
+  }
+  return best;
+}
+// turn j.dir toward `want` with inertia: ask for an angular velocity that eases in as the angle closes, but let the real one change only so fast, and never exceed the cap
+function _javelinSteer(j, want, dt, spec) {
+  const d = j.dir, w = j.omega;
+  const dot = Math.max(-1, Math.min(1, d.dot(want)));
+  const ang = Math.acos(dot);
+  _jvAxis.crossVectors(d, want);
+  let len = _jvAxis.length();
+  if (len < 1e-5) { if (dot < 0) _jvAxis.set(d.y, -d.x, 0).normalize(); else _jvAxis.set(0, 0, 0); } else _jvAxis.divideScalar(len);
+  _jvTmp.copy(_jvAxis).multiplyScalar(Math.min(spec.turnRate, ang * 5));                // ease the turn as it approaches the desired heading
+  _jvTmp.sub(w); const dl = _jvTmp.length(), cap = spec.turnAccel * dt;                   // ...and how fast it can actually change
+  if (dl > cap) _jvTmp.multiplyScalar(cap / dl);
+  w.add(_jvTmp);
+}
+function _javelinSpin(j, dt, spec) {
+  const w = j.omega;
+  w.addScaledVector(j.dir, -w.dot(j.dir));                                                // only turning that bends the flight path counts
+  const rate = w.length();
+  if (rate > spec.turnRate) { w.multiplyScalar(spec.turnRate / rate); }
+  const a = Math.min(rate, spec.turnRate) * dt;
+  if (a > 1e-6) { _jvTmp.copy(w).normalize(); j.dir.applyAxisAngle(_jvTmp, a).normalize(); }
+}
+function _javelinHome(j, dt, spec) {
+  // A locked seeker reacts faster than manual steering and brakes for tight turns.
+  const angle = j.dir.angleTo(_jvWant);
+  _jvAxis.crossVectors(j.dir, _jvWant);
+  if (_jvAxis.lengthSq() > 1e-10) j.dir.applyAxisAngle(_jvAxis.normalize(), Math.min(angle, spec.turnRate * dt));
+  j.omega.set(0, 0, 0);
+  return Math.max(.35, Math.cos(angle));
+}
+// tiny exhaust puffs from one shared pool: they outlive the missile, so a flight leaves a trail you can read
+const _jvPuffs = []; let _jvPuffI = 0, _jvPuffGeo = null;
+function _javelinPuff(x, y, z, now) {
+  if (!_jvPuffGeo) _jvPuffGeo = new THREE.SphereGeometry(1, 6, 5);
+  if (_jvPuffs.length < 260) {
+    const m = new THREE.Mesh(_jvPuffGeo, new THREE.MeshBasicMaterial({ color: 0xffb040, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.visible = false; scene.add(m); _jvPuffs.push({ m, t: -9 });
+  }
+  const p = _jvPuffs[_jvPuffI++ % _jvPuffs.length]; p.t = now; p.m.position.set(x, y, z); p.m.visible = true;
+}
+function _javelinTrailTick(now) {
+  for (const p of _jvPuffs) {
+    if (!p.m.visible) continue;
+    const a = (now - p.t) / 650;
+    if (a >= 1) { p.m.visible = false; continue; }
+    p.m.scale.setScalar(0.07 + a * 0.28); p.m.material.opacity = (1 - a) * (1 - a) * 0.75;
+    p.m.material.color.setHex(a < 0.25 ? 0xffd070 : a < 0.55 ? 0xff7a20 : 0x7a5a44);
+  }
+}
+// 🎥 Missile cam: Q rides a Javelin you have in the air. The mouse points it, W flies it faster and S slower; Q again (or the missile hitting something) brings you back.
+// It uses its own camera (the loop already renders whichever camera the view asks for), so your body, your aim and your position are untouched underneath.
+const MISSILE_CAM = { active: false, id: null, speed: 1, pos: new THREE.Vector3(), yaw: 0, pitch: 0, endAt: 0, saved: null, xhair: null, hudEl: null, camera: new THREE.PerspectiveCamera(82, 16 / 9, 0.05, 1500) };
+const MISSILE_CAM_SPEC = { turnRate: 3.4, turnAccel: 16 };
+const _mcE = new THREE.Euler(0, 0, 0, 'YXZ');
+function _missileCamHeading(dir) {                                      // face the look direction along the missile's heading, so the mouse starts where it points
+  MISSILE_CAM.yaw = Math.atan2(-dir.x, -dir.z);
+  MISSILE_CAM.pitch = Math.asin(Math.max(-1, Math.min(1, dir.y)));
+  euler.y = MISSILE_CAM.yaw; euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, MISSILE_CAM.pitch));
+  camera.quaternion.setFromEuler(euler);
+}
+function missileCamStart() {
+  if (MISSILE_CAM.active || isDead || !gameStarted) return false;
+  const j = javelins.find(q => !q.remote && q.epoch === matchEpoch && q.map === activeMapName);
+  if (!j) { if (currentWeapon?.id === 'javelin_launcher') showAnnouncement('NO MISSILE IN THE AIR', 'Launch a missile first', '#ffaa33', 1400); return false; }
+  MISSILE_CAM.active = true; MISSILE_CAM.id = j.id; MISSILE_CAM.speed = 1; MISSILE_CAM.endAt = 0;
+  MISSILE_CAM.saved = { x: euler.x, y: euler.y };
+  _missileCamHeading(j.homing ? j.dir : j.cruise);
+  MISSILE_CAM.pos.copy(j.pos).addScaledVector(j.dir, 0.4);
+  MISSILE_CAM.camera.position.copy(MISSILE_CAM.pos);
+  const ch = document.getElementById('crosshair'); if (ch) { MISSILE_CAM.xhair = ch.style.display; ch.style.display = 'none'; }
+  try { playSoundEvent('click', { volume: 0.4, pitch: 0.8, minGap: 40 }); } catch (e) {}
+  return true;
+}
+function missileCamEnd() {
+  if (!MISSILE_CAM.active) return;
+  MISSILE_CAM.active = false; MISSILE_CAM.id = null; MISSILE_CAM.endAt = 0;
+  if (MISSILE_CAM.saved) { euler.x = MISSILE_CAM.saved.x; euler.y = MISSILE_CAM.saved.y; camera.quaternion.setFromEuler(euler); MISSILE_CAM.saved = null; }
+  const ch = document.getElementById('crosshair'); if (ch) ch.style.display = MISSILE_CAM.xhair || 'block';
+  if (MISSILE_CAM.hudEl) MISSILE_CAM.hudEl.style.display = 'none';
+}
+function _missileCamPick(now) {                                         // which missile I am riding; the next one if it is gone, and out again once none is left
+  if (!MISSILE_CAM.active) return null;
+  if (isDead || !gameStarted) { missileCamEnd(); return null; }
+  const mine = javelins.find(q => q.id === MISSILE_CAM.id && q.epoch === matchEpoch && q.map === activeMapName);
+  if (mine) return mine;
+  const next = javelins.find(q => !q.remote && q.epoch === matchEpoch && q.map === activeMapName);
+  if (next) { MISSILE_CAM.id = next.id; MISSILE_CAM.speed = 1; MISSILE_CAM.endAt = 0; _missileCamHeading(next.homing ? next.dir : next.cruise); return next; }
+  if (!MISSILE_CAM.endAt) MISSILE_CAM.endAt = now + 800;                 // hold the last picture for a moment: that was the blast
+  if (now >= MISSILE_CAM.endAt) missileCamEnd();
+  return null;
+}
+function _missileCamFollow(j, dt) {
+  const want = keys['KeyW'] ? 1.7 : keys['KeyS'] ? 0.45 : 1;
+  MISSILE_CAM.speed += (want - MISSILE_CAM.speed) * Math.min(1, dt * 3);
+  MISSILE_CAM.pos.copy(j.pos).addScaledVector(j.dir, 0.4);
+  const ty = Math.atan2(-j.dir.x, -j.dir.z), tp = Math.asin(Math.max(-1, Math.min(1, j.dir.y)));
+  let dy = ty - MISSILE_CAM.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  const k = Math.min(1, dt * 14);
+  MISSILE_CAM.yaw += dy * k; MISSILE_CAM.pitch += (tp - MISSILE_CAM.pitch) * k;
+  _mcE.set(Math.max(-1.52, Math.min(1.52, MISSILE_CAM.pitch)), MISSILE_CAM.yaw, 0, 'YXZ');
+  const c = MISSILE_CAM.camera;
+  c.position.copy(MISSILE_CAM.pos); c.quaternion.setFromEuler(_mcE);
+  const aspect = (window.innerWidth || 1920) / (window.innerHeight || 1080), fov = 82 + 14 * Math.max(-0.5, MISSILE_CAM.speed - 1);
+  if (Math.abs(c.aspect - aspect) > 1e-3 || Math.abs(c.fov - fov) > 0.05) { c.aspect = aspect; c.fov = fov; c.updateProjectionMatrix(); }
+}
+function _missileCamHud(j) {
+  let el = MISSILE_CAM.hudEl;
+  if (!MISSILE_CAM.active) { if (el) el.style.display = 'none'; return; }
+  if (!el) {
+    el = MISSILE_CAM.hudEl = document.createElement('div'); el.id = 'missile-cam-hud';
+    el.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:8990;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 52%,rgba(0,0,0,0.62) 100%);font:700 13px "Courier New",monospace;letter-spacing:2px;color:#ffaa33;text-shadow:0 0 6px #000;';
+    el.innerHTML = '<div class="mc-top" style="position:absolute;top:18px;left:0;right:0;text-align:center"></div>'
+      + '<div style="position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid #ffaa33;border-radius:50%;box-shadow:0 0 8px #ffaa33"></div>'
+      + '<div style="position:absolute;bottom:26px;left:0;right:0;text-align:center;color:#ffd9a0">MOUSE steer · W faster · S slower · Q back</div>';
+    document.body.appendChild(el);
+  }
+  el.style.display = 'block';
+  el.querySelector('.mc-top').textContent = j ? `MISSILE CAM · ${j.targetId ? 'TARGET LOCKED' : j.homing ? 'SEEKING' : 'CLIMBING'} · ${Math.round(j.speed)} m/s` : 'SIGNAL LOST';
+}
+document.addEventListener('keydown', e => {
+  if (e.code !== 'KeyQ' || e.repeat) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (MISSILE_CAM.active) { missileCamEnd(); return; }
+  if (!gameStarted || isDead || SOCIAL_VIEW.mode) return;
+  missileCamStart();
+});
 function updateJavelins(dt) {
-  if (!javelins.length) return;
-  const spec = WEAPONS.find(w => w.id === 'javelin_launcher')?.lockOn;
-  if (!spec) return;
   const now = Date.now();
+  if (!javelins.length) { _missileCamPick(now); _missileCamHud(null); _javelinTrailTick(now); return; }
+  const spec = projectileWeaponSpec('javelin_launcher').lockOn;
+  dt = Math.min(dt, 0.05);
+  const camJ = _missileCamPick(now);
   for (let i = javelins.length - 1; i >= 0; i--) {
     const j = javelins[i];
-    if (now - j.bornAt > 6000) { scene.remove(j.mesh); javelins.splice(i, 1); continue; }
-    if (!j.homing && now - j.bornAt >= spec.homingDelay) j.homing = true;
-    const bot = resolveBot(j.targetId);
-    const alive = j.homing && bot && !bot.dead;
-    if (alive) {
-      const mesh = remoteMeshes[j.targetId];
-      const tx = mesh ? mesh.position.x : bot.x, ty = (mesh ? mesh.position.y : 0) + 1.0, tz = mesh ? mesh.position.z : bot.z;
-      const dx = tx - j.x, dy = ty - j.y, dz = tz - j.z;
-      const dist = Math.hypot(dx, dy, dz) || 0.001;
-      const turn = Math.min(1, spec.turnRate * dt);
-      j.vx += ((dx / dist) * spec.homingSpeed - j.vx) * turn;
-      j.vy += ((dy / dist) * spec.homingSpeed - j.vy) * turn;
-      j.vz += ((dz / dist) * spec.homingSpeed - j.vz) * turn;
+    if (now - j.bornAt > 8000 || j.epoch!==matchEpoch || j.map!==activeMapName) { removeJavelin(i); continue; }
+    const camMine = camJ === j, pos = j.pos;
+    if (j.remote) {
+      // Other clients render the shooter's missile, but never apply damage from it.
+      if (!j.lastNetAt || now - j.lastNetAt < 220) pos.addScaledVector(j.dir, dt * j.speed);
     } else {
-      j.vy -= (j.homing ? 18 : 8) * dt; // target gone → falls; still launching → gentle arc
-    }
-    const nx = j.x + j.vx * dt, ny = j.y + j.vy * dt, nz = j.z + j.vz * dt;
-    if (_javelinBlockedByWall(j.x, j.y, j.z, nx, ny, nz) || ny <= 0.05) {
-      const stopPos = new THREE.Vector3(nx, Math.max(0.05, ny), nz);
-      spawnAbilityAOEFX(stopPos, 1.0, 0xffaa33);
-      playSoundEvent('explosion', { position: stopPos, volume: 0.6 });
-      scene.remove(j.mesh); javelins.splice(i, 1);
-      continue;
-    }
-    j.x = nx; j.y = ny; j.z = nz;
-    j.mesh.position.set(j.x, j.y, j.z);
-    const vel = new THREE.Vector3(j.vx, j.vy, j.vz);
-    if (vel.lengthSq() > 1e-6) j.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), vel.normalize());
-    if (alive) {
-      const mesh = remoteMeshes[j.targetId];
-      const by = (mesh ? mesh.position.y : 0) + 1.0;
-      const dHit = Math.hypot(j.x - bot.x, j.y - by, j.z - bot.z);
-      if (dHit < (spec.hitRadius || 1.6)) {
-        const hitPos = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
-        const dummy = TRAINING_DUMMIES.find(d => d.id === j.targetId);
-        if (dummy) handleDummyHit(dummy, mesh, { weaponId: 'javelin_launcher' }, hitPos);
-        else emitHit(j.targetId, j.id, 'javelin_launcher', hitPos);
-        spawnAbilityAOEFX(hitPos, 1.3, 0xffaa33);
-        playSoundEvent('explosion', { position: hitPos, volume: 0.9 });
-        scene.remove(j.mesh); javelins.splice(i, 1);
+      if (!j.homing && pos.y - j.launchY >= spec.climbHeight) j.homing = true;
+      if (j.homing) {
+        j.searchIn -= dt;
+        if (j.searchIn <= 0) {
+          j.searchIn = .08;
+          const target = j.targetId && javelinEnemyPosition(j.targetId, remoteMeshes[j.targetId], _jvTarget);
+          const sight = target && _jvSight.copy(target).sub(pos);
+          const distance = sight ? sight.length() : 0;
+          if (!sight || distance < .01 || distance > spec.range ||
+              javelinWallDistance(pos, sight.divideScalar(distance), distance) !== Infinity) {
+            const next = acquireJavelinEnemy(j, spec);
+            if (next && next !== j.targetId && camMine) playSoundEvent('radar_ping', { volume: .5 });
+            j.targetId = next;
+          }
+        }
+        const target = j.targetId && javelinEnemyPosition(j.targetId, remoteMeshes[j.targetId], _jvTarget);
+        const speed = spec.homingSpeed * (camMine ? MISSILE_CAM.speed : 1);
+        if (target) {
+          _jvWant.copy(target).sub(pos).normalize();
+          j.speed = speed * _javelinHome(j, dt, spec);
+        } else {
+          if (camMine) camera.getWorldDirection(_jvWant);
+          else _jvWant.copy(j.cruise);
+          const turningOver = j.dir.y > -.14;
+          const control = camMine && !turningOver ? MISSILE_CAM_SPEC : spec;
+          _javelinSteer(j, _jvWant, dt, control);
+          _javelinSpin(j, dt, control);
+          j.speed = turningOver ? speed * .28 : speed;
+        }
       }
+      const step = j.speed * dt;
+      const floor = j.dir.y < 0 ? Math.max(0, (pos.y - .05) / -j.dir.y) : Infinity;
+      const stop = Math.min(javelinWallDistance(pos, j.dir, step), floor);
+      let direct = null, travel = Math.min(step, stop);
+      for (const pid in remoteMeshes) {
+        if (!javelinEnemyPosition(pid, remoteMeshes[pid], _jvTarget)) continue;
+        const delta = _jvSight.copy(_jvTarget).sub(pos);
+        const along = delta.dot(j.dir);
+        const radial2 = delta.lengthSq() - along * along, r2 = spec.hitRadius ** 2;
+        if (radial2 >= r2) continue;
+        const span = Math.sqrt(r2 - radial2), entry = Math.max(0, along - span);
+        if (along + span < 0 || entry > travel || entry >= stop) continue;
+        const distance = delta.length();
+        if (distance > .01 && javelinWallDistance(pos, delta.divideScalar(distance), distance) !== Infinity) continue;
+        direct = pid; travel = entry;
+      }
+      if (direct || stop <= step) {
+        pos.addScaledVector(j.dir, direct ? travel : Math.max(0, stop - .035));
+        if (camMine) _missileCamFollow(j, dt);
+        detonateJavelin(j, direct);
+        removeJavelin(i);
+        continue;
+      }
+      pos.addScaledVector(j.dir, step);
     }
+    j.mesh.position.copy(pos);
+    _jvQ.setFromUnitVectors(_jvFwd, j.dir); j.mesh.quaternion.slerp(_jvQ, Math.min(1, dt * 18));     // the body follows the flight path smoothly
+    if (camMine) _missileCamFollow(j, dt);
+    j.puffAcc = (j.puffAcc || 0) + dt;
+    if (j.puffAcc >= 0.02) { j.puffAcc = 0; _javelinPuff(pos.x - j.dir.x * 0.3, pos.y - j.dir.y * 0.3, pos.z - j.dir.z * 0.3, now); }
   }
+  _missileCamHud(camJ && javelins.includes(camJ) ? camJ : null);
+  _javelinTrailTick(now);
+}
+function detonateJavelin(j, direct) {
+  const weaponId = 'javelin_launcher';
+  if (direct) {
+    const dummy = TRAINING_DUMMIES.find(d => d.id === direct);
+    if (dummy) handleDummyHit(dummy, remoteMeshes[direct], { weaponId }, j.pos);
+    else emitHit(direct, j.id, weaponId, j.pos, false, { skinId: j.skinId });
+  }
+  rocketExplode(j.pos, weaponId, direct, { skinLook: skinLookById(j.skinId), skinId: j.skinId, javelinId: j.id });
 }
 function _spawnAbilityBeam(from, to, color = 0x9fe8ff, radius = 0.04, life = 160) {
   const dir = to.clone().sub(from);
@@ -48614,6 +48885,7 @@ function tryShoot() {
   if (window.PVP_UNDERWORLD?.paused) return;
   if (match && match.dice && match.dice.me && match.dice.me.rolling) return;   // 🎲 the dice are in your hand
   if (!equipReady()) { if (shooting) equipNudge(); return; }                   // ⏱️ it is still coming up
+  if (MISSILE_CAM.active) return;                                                // your hands are on the missile
   if(currentWeapon?.prototype && !currentUser?.isAdmin)return;
   if (SOCIAL_VIEW.mode) return;
   if ((!pointerLocked && !gameStarted) || isDead) return;
@@ -48642,7 +48914,7 @@ function tryShoot() {
   // Javelin Launcher only fires through its ability (fireJavelinVolley) — left-click
   // (and auto-fire, which also calls tryShoot) does nothing.
   if (currentWeapon.id === 'javelin_launcher') {
-    if (now - lastShot > 260) { flashAbilityName('[E] TO LAUNCH'); lastShot = now; }
+    tryLaunchJavelin(currentWeapon);
     return;
   }
   const activeRateMult = ((abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1)
@@ -62561,7 +62833,7 @@ function startInspect() {
   model._secretInspect = secretInspectFor(id);
   model._inspectMode = true;
   model._reloadStart = Date.now();
-  model._reloadDur = model._secretInspect?.triggered ? 3400 : INSPECT_MS;
+  model._reloadDur = Math.max(INSPECT_MIN_MS, model._secretInspect?.triggered ? 3400 : INSPECT_MS);   // (never shorter than the roll)
   const ctx = getAudioCtx();
   if (ctx) {
     const t0 = ctx.currentTime + 0.002;
@@ -64313,6 +64585,23 @@ ak20_xerror: { equip: 'glitch', equipMs: 950, equipSfx: ['glitchsfx', 'snapin'] 
 pistol_frost: { equip: 'assemble', equipMs: 950, equipSfx: ['crystal', 'chime'] }
 };
 
+// 🌀 Every inspect (guns, melee, utilities) is one slow, steady roll about the weapon's front-to-back axis (the model's own z), held in ONE hand, by its handle
+// (a gun's second hand is put away for the inspect):
+//   0 s 0 deg · rolls to -65 over 1 s at a constant speed · held for 2 s · rolls back to 0 over 1 s at the same speed · done at 4 s.
+// It is added to whatever roll the weapon's own inspect pose has, so nothing snaps, and an inspect is never shorter than the roll (INSPECT_MIN_MS).
+const INSPECT_ROLL_KEYS = [[0, 0], [1.0, -65], [3.0, -65], [4.0, 0]];
+const INSPECT_ROLL_EASE = 0;          // 0 = exactly even speed (an earlier version blended in 0.4 of a smooth ease in and out)
+const INSPECT_MIN_MS = 4000;
+function _inspectRoll(sec) {
+  const K = INSPECT_ROLL_KEYS;
+  if (!(sec > 0) || sec >= K[K.length - 1][0]) return 0;
+  for (let i = 1; i < K.length; i++) {
+    if (sec > K[i][0]) continue;
+    const u = (sec - K[i - 1][0]) / (K[i][0] - K[i - 1][0]), e = u + INSPECT_ROLL_EASE * (u * u * (3 - 2 * u) - u);
+    return (K[i - 1][1] + (K[i][1] - K[i - 1][1]) * e) * Math.PI / 180;
+  }
+  return 0;
+}
 function _reloadPose(track, t) {
   // A Hermite spline through the keys, with Fritsch-Carlson tangents. The old
   // smoothstep between each pair of keys brought the gun to a dead stop at every
@@ -64439,6 +64728,7 @@ function updateReloadAnim() {
   }
   const H = model._hands;
   const rest = () => {
+    if (model._frontHid) { model._frontHid = false; if (H && !H.hideFront) H.front.visible = model._frontWas !== false; }   // the second hand comes back after an inspect
     if(model._loader?.round)model._loader.round.visible=false;
     if(model._feedRound)model._feedRound.visible=false;
     if (model._homePos) model.position.copy(model._homePos);
@@ -64467,6 +64757,10 @@ function updateReloadAnim() {
   }
   if (!model._homePos) model._homePos = model.position.clone();
   if (H && H.hideFront) H.front.visible = true;   // the off hand comes in to work
+  if (H && !H.single && model._inspectMode) {      // an inspect is held in one hand, at the handle: the second hand is put away
+    if (!model._frontHid) { model._frontHid = true; model._frontWas = H.front.visible; }
+    H.front.visible = false;
+  }
   model._wasReloading = true;
   const t = Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur);
   if (t >= 1) {
@@ -64523,6 +64817,7 @@ function updateReloadAnim() {
     inspecting ? inspectTrack : ((skinReload && skinReload.keys) || (plan && plan.keys) || RELOAD_KEYS[id] || _RELOAD_DEFAULT), t);
   if (inspecting) {
     updateSecretInspect(model, t, P);
+    P.rz += _inspectRoll(t * model._reloadDur / 1000);         // the roll every inspect has
     // Open whatever this weapon opens, out and back across the middle of the
     // look. Same channels the reload drives, so nothing special downstream.
     const op = secretTrack || inspectTrackUsesAssembly(inspectTrack) ? null : inspectOpenPose(id);
@@ -70124,9 +70419,9 @@ function applyBlastImpulse(pos, opts = {}) {
   // progress but never subtract from it, so a blast can only ever help you up --
   // but cap the total, or two charges stack into the same orbit the single one
   // used to reach.
-  const up = Math.min(away.y * power, BLAST_MAX_UP);
+  const up = Math.min(away.y * power, BLAST_MAX_UP) * BLAST_JUMP_VEL_MULT;
   const before = slamState ? Math.max(slamState.vel, 0) : 0;
-  const climb = Math.min(before + up, BLAST_MAX_UP);
+  const climb = Math.min(before + up, BLAST_MAX_UP * BLAST_JUMP_VEL_MULT);
   if (slamState) slamState.vel = climb;
   else slamState = { vel: climb, type: 'jump' };
   // 🛹 Slide into a blast and it carries you. Normally a charge shoves you away
@@ -70598,7 +70893,7 @@ function startItemInspect() {
       || grenadeWindupT < 1 || _equip || spearThrown) return false;
   const kind = itemInspectKind(slot, item), spec = ITEM_INSPECT[kind];
   if (model._park) model._park = null;
-  itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: spec.ms, keys: spec.keys, beats: spec.beats, beat: 0,
+  itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: Math.max(INSPECT_MIN_MS, spec.ms), keys: spec.keys, beats: spec.beats, beat: 0,
                   base: model.position.clone(), baseRot: model.rotation.clone(), order: model.rotation.order };
   return true;
 }
@@ -70621,6 +70916,7 @@ function updateItemInspect() {
   if (!held || busy) { cancelItemInspect(); return; }
   const t = Math.min(1, (performance.now() - s.t0) / s.ms);
   const P = _reloadPose(s.keys, t);
+  P.rz += _inspectRoll((performance.now() - s.t0) / 1000);   // the roll every inspect has
   m.rotation.order = 'YXZ';
   m.position.set(s.base.x + P.px, s.base.y + P.py, s.base.z + P.pz);
   m.rotation.set(s.baseRot.x + P.rx, s.baseRot.y + P.ry, s.baseRot.z + P.rz);
@@ -77308,6 +77604,7 @@ function loop() {
   });
   viewCamera = window.PVP_RAGDOLL?.viewCamera() || viewCamera;
   if (SOCIAL_VIEW.mode) viewCamera = SOCIAL_VIEW.camera;
+  if (MISSILE_CAM.active) viewCamera = MISSILE_CAM.camera;                       // riding a Javelin
   safeLoopStep('stealth-laser',()=>window.PVE_STEALTH?.update(weaponModels[currentWeaponIdx],viewCamera===camera&&!SOCIAL_VIEW.mode&&!THEATER.active));
   if (!THEATER.active) {
     const hidden = viewCamera !== camera ? camera.children.filter(o => o.visible && !(o instanceof THREE.Light)) : [];
@@ -80519,6 +80816,7 @@ function applyUpgrades(w) {
 }
 
 function selectMode(modeId) {
+  applyJumpTuning(modeId === 'obby');   // the obstacle course keeps its original, longer jump
   if (modeId === 'backrooms' && window.PVP_BACKROOMS) { window.PVP_BACKROOMS.open(); return; }
   if (modeId === 'underworld' && window.PVP_UNDERWORLD) { window.PVP_UNDERWORLD.open(); return; }
   selectedModeConfig = GAME_MODE_CONFIGS[modeId] || GAME_MODE_CONFIGS['ffa5'];

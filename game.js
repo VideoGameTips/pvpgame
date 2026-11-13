@@ -36770,6 +36770,7 @@ const BODY = (() => {
 // arm in every other one, which is what being held means.
 const ARM_TUCK = -0.28;   // the firing arm's abduction: with the shoulder at the corner of a blocky chest the elbow has to come in
 const GUN_HOLD = {
+  upright: 0.35,   // the whole grip tipped up so the weapon is held more upright
   // Held OUT, not tucked into the chest. The first solve put the grip 0.21 m
   // forward of the body's centre, which reads as a weapon clutched against the
   // ribs; this one puts it at 0.32, which leaves the upper arm hanging close to
@@ -36981,6 +36982,28 @@ const _KIT = {
               trouser: '#3a4047' },
 };
 
+function addSheetLimb(group, upper, lower, width, height, depth, x, top) {
+  const geo=new THREE.BoxGeometry(width,height,depth,1,4,1);
+  const pos=geo.attributes.position, normal=geo.attributes.normal, uv=geo.attributes.uv;
+  const joint=upper.position.y+lower.position.y, bottom=top-height;
+  const levels=[bottom,joint-.045,joint,joint+.045,top];
+  const indices=[], weights=[];
+  for(let i=0;i<pos.count;i++){
+    const level=Math.round((pos.getY(i)/height+.5)*4), y=levels[level];
+    pos.setXYZ(i,pos.getX(i)+x,y,pos.getZ(i));
+    if(Math.abs(normal.getY(i))<.5)uv.setY(i,(y-bottom)/height);
+    const bent=level<2?1:level===2?.5:0;
+    indices.push(0,1,0,0);weights.push(1-bent,bent,0,0);
+  }
+  geo.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(indices,4));
+  geo.setAttribute('skinWeight',new THREE.Float32BufferAttribute(weights,4));
+  const mesh=new THREE.SkinnedMesh(geo);
+  mesh.castShadow=true;mesh.frustumCulled=false;
+  group.add(mesh);group.updateMatrixWorld(true);
+  mesh.bind(new THREE.Skeleton([upper,lower]));
+  return mesh;
+}
+
 const PIXEL_SKINS = {
   // 🖤 The default. Balaclava under the helmet, goggle band across the eyes,
   // plate carrier with amber-tipped mag pouches. Black on black, so the grey
@@ -37120,12 +37143,112 @@ const PIXEL_SKINS = {
     ])),
 };
 
+// ⬜ THE BLANK: the default avatar. White armour, a black visor, charcoal joints, and one team accent (red or blue) on the shoulders and chest bar. It is drawn
+// pixel by pixel from the sheet: each face is rows of letters (W armour #e6e6e6, G secondary #b3b9c4, D straps #3a3f4b, J joints and boots #1f2430, K visor #0a0a0a,
+// A the team accent), so one drawing serves both teams. The body is the same rig as every other skin, so animation, hitboxes and aiming are untouched.
+// The sheet draws an arm or a leg as ONE 16-row strip; the rig has an upper and a lower part of each, so the strip is cut at the elbow / knee (see _blankSlice).
+// The Blank's proportions, exactly as the sheet gives them: head 0.45 cube; torso 0.45 x 0.675 x 0.225; each arm and each leg 0.225 x 0.675 x 0.225 (1.8 m tall in all). Legs stand on the
+// floor, the torso sits on them, the head sits straight on the torso (no neck) and the arms hang from the top of the torso, flush with its sides, as do the legs under it. The rig's joints
+// do not move; only the blocks are laid out to fill the sheet's figure (see makePlayerMesh). The volume is 0.296 m3, a little under the old rig's 0.332.
+const BLANK = (() => {
+  const head = .45, tw = .45, th = .675, td = .225, aw = .225, ah = .675, ad = .225, lw = .225, lh = .675, ld = .225;
+  const torsoBot = lh, torsoTop = lh + th;
+  return { head, tw, th, td, aw, ah, ad, lw, lh, ld, torsoBot, torsoTop, headCenter: torsoTop + head / 2 };
+})();
+const VESPER = { head:.46, tw:.56, th:.56, td:.30, aw:.22, ah:.66, ad:.28,
+  lw:.24, lh:.72, ld:.28, torsoBot:.72, torsoTop:1.28, headCenter:1.51 };
+const SHEET_CHARACTER_ART = {
+  vesper: { source:window.PVP_VESPER_FACES, dimensions:VESPER, hand:0xe0a4ee, foot:'#dedce6',
+    name:'Vesper', desc:'Black hoodie, violet accents and striped trousers.', swatch:['#1f1f2b','#dda8ff'] },
+  nova: { source:window.PVP_NOVA_FACES, dimensions:BLANK, hand:0xe6edf7, foot:'#e6edf7',
+    name:'Nova', desc:'White armor, silver hair and cyan accents.', swatch:['#e6edf7','#00e5ff'] },
+  ember: { source:window.PVP_EMBER_FACES, dimensions:BLANK, hand:0x1e1e1e, foot:'#1e1e1e',
+    name:'Ember', desc:'Orange jacket, auburn hair and black trousers.', swatch:['#1e1e1e','#ffd24a'] },
+  raven: { source:window.PVP_RAVEN_FACES, dimensions:BLANK, hand:0xf9d9c4, foot:'#1f1f23',
+    name:'Raven', desc:'Black hoodie, red eyes and red trim.', swatch:['#1f1f23','#d72638'] },
+  pixel: { source:window.PVP_PIXEL_FACES, dimensions:BLANK, hand:0xf9d9c4, foot:'#e6e6f2',
+    name:'Pixel', desc:'Pink hair, cyan eyes and a white face-print hoodie.', swatch:['#ff85d0','#00e6ff'] },
+  cipher: { source:window.PVP_ARENA_CHARACTER_FACES?.cipher, dimensions:BLANK, hand:0x2d2238, foot:'#2a1b36',
+    name:'Cipher', desc:'Dark hood, purple visor and a diamond back emblem.', swatch:['#2a1b36','#c35dff'] },
+  frost: { source:window.PVP_ARENA_CHARACTER_FACES?.frost, dimensions:BLANK, hand:0xa8dfff, foot:'#eff7ff',
+    name:'Frost', desc:'Ice-blue hair and a snowflake jacket.', swatch:['#eff7ff','#1e7fe6'] },
+  atlas: { source:window.PVP_ARENA_CHARACTER_FACES?.atlas, dimensions:BLANK, hand:0x6b6b6b, foot:'#3a3a3a',
+    name:'Atlas', desc:'Gray armor plates, orange accents and white cuffs.', swatch:['#a6a6a6','#ff8c00'] },
+  ace: { source:window.PVP_ARENA_CHARACTER_FACES?.ace, dimensions:BLANK, hand:0xd70000, foot:'#d9d9d9',
+    name:'Ace', desc:'Red-streaked hair and a striped red jacket.', swatch:['#1f1f1f','#e10600'] },
+  nomad: { source:window.PVP_ARENA_CHARACTER_FACES?.nomad, dimensions:BLANK, hand:0x8b6a4f, foot:'#4a3327',
+    name:'Nomad', desc:'Tan scarf, leather straps and a utility pouch.', swatch:['#3b2a1f','#e6d2b8'] },
+};
+function sheetCharacterSkin({source,dimensions,hand,foot}) {
+  const faces=Object.fromEntries(Object.entries(source).map(([part,tiles])=>[
+    part,Object.fromEntries(Object.entries(tiles).map(([face,base64])=>{
+      const rgb=atob(base64);
+      const draw=p=>{
+        for(let i=0;i<256;i++){
+          const j=i*3;
+          p(`rgb(${rgb.charCodeAt(j)},${rgb.charCodeAt(j+1)},${rgb.charCodeAt(j+2)})`,i&15,i>>4);
+        }
+      };
+      return [face,draw];
+    })),
+  ]));
+  faces.head.side=faces.head.right;
+  faces.torso.side=faces.torso.right;
+  const lower=draw=>p=>draw((c,x,y)=>{if(y>=8)p(c,x,(y-8)*2,1,2);});
+  return { sheetFaces:faces,sheetDimensions:dimensions,head:faces.head,torso:faces.torso,hand,foot,
+    armU:faces.arm.front,armF:lower(faces.arm.front),armUS:faces.arm.right,armFS:lower(faces.arm.right),
+    leg:faces.leg.front,shin:lower(faces.leg.front),legS:faces.leg.right,shinS:lower(faces.leg.right) };
+}
+function blankSkin(accent) {
+  const key = { W: '#c9ccd1', G: '#9aa0ab', D: '#3a3f4b', J: '#1f2430', K: '#0a0a0a', A: accent };   // (the sheet's #e6e6e6 and #b3b9c4, turned down a step to a soft grey)
+  const R = (ch, n = 16) => ch.repeat(n);
+  const rows = (...runs) => runs.flatMap(([n, s]) => Array(n).fill(s));          // [count, row] pairs -> the 16 rows of a face
+  const draw = rs => gridFace(key, rs);
+  const solid = ch => draw(rows([16, R(ch)]));
+  const slice = (full, a, b) => Array.from({ length: 16 }, (_, y) => full[Math.min(15, Math.floor(16 * a + y * (b - a)))]);   // rows a..b (fractions of the strip), stretched to 16
+  const bar = 'WW' + R('A', 12) + 'WW';
+  const armStrip = rows([3, R('A')], [5, R('W')], [3, R('D')], [3, R('W')], [2, R('J')]);   // shoulder pad, sleeve, elbow band, sleeve, wrist
+  const legStrip = rows([7, R('W')], [3, R('D')], [4, R('W')], [2, R('J')]);                // thigh, knee band, shin, boot top
+  const fu = (BLANK.torsoTop - BODY.elbow) / BLANK.ah, fl = (BLANK.lh - BODY.knee) / BLANK.lh;   // the arm and leg are one block each: the strip is cut where the joint is
+  const torsoFace = rows([3, R('D')], [2, R('W')], [2, bar], [4, R('W')], [2, R('D')], [3, R('J')]);
+  const torsoSide = rows([11, R('W')], [2, R('D')], [3, R('J')]);
+  return {
+    hand: 0xc9ccd1, foot: '#1f2430',
+    head: {
+      front:  draw(rows([6, R('W')], [6, 'WW' + R('K', 12) + 'WW'], [2, R('W')], [2, R('G')])),
+      back:   draw(rows([14, R('W')], [2, R('G')])),
+      left:   draw(rows([6, R('W')], [6, R('W', 12) + R('D', 4)], [4, R('W')])),      // -X face: the dark visor wrap is at the front edge
+      right:  draw(rows([6, R('W')], [6, R('D', 4) + R('W', 12)], [4, R('W')])),      // +X face: the same, mirrored
+      side:   solid('D'),                                                              // (the neck, a charcoal joint)
+      top:    solid('W'), bottom: solid('J'),
+    },
+    torso: { front: draw(torsoFace), back: draw(torsoFace), side: draw(torsoSide), top: solid('W'), bottom: solid('J') },
+    armU: draw(slice(armStrip, 0, fu)),        armF: draw(slice(armStrip, fu, 1)),
+    armUS: solid('W'), armFS: solid('W'), armUT: solid('A'),                           // the sides of an arm are plain; the top of the shoulder is the accent
+    leg: draw(slice(legStrip, 0, fl)),         shin: draw(slice(legStrip, fl, 1)),
+    legS: solid('W'), shinS: solid('W'),
+  };
+}
+PIXEL_SKINS.operator = { ...PIXEL_SKINS.default };            // the old default (the black Operator) is still a skin you can pick
+PIXEL_SKINS.blank_red = blankSkin('#ff4444');                 // The Blank, red team
+PIXEL_SKINS.blank_blue = blankSkin('#3b82ff');                // The Blank, blue team
+PIXEL_SKINS.default = blankSkin('#ff4444');                   // the default is The Blank (makePlayerMesh gives allies the blue one)
+for(const [id,art] of Object.entries(SHEET_CHARACTER_ART)) if(art.source) PIXEL_SKINS[id]=sheetCharacterSkin(art);
+
 // Swap a built body over to a drawn skin. Everything below only replaces
 // materials and, for two skins, adds one block of geometry — the rig, the
 // joints and the hitboxes are untouched, so animation and shooting cannot
 // notice which skin is on.
 function applyPixelSkin(art, parts) {
   const { group, head, torso, armLimbs, legLimbs, hands, feet, neck, pelvis } = parts;
+  if (art.sheetFaces) {
+    const f=art.sheetFaces;
+    head.material=charFaceMats('h:'+art._id,f.head);
+    torso.material=charFaceMats('t:'+art._id,f.torso);
+    for(const arm of armLimbs) arm.material=charFaceMats('a:'+art._id,f.arm);
+    for(const leg of legLimbs) leg.material=charFaceMats('g:'+art._id,f.leg);
+    return;
+  }
   // Hair, caps and helmets are authored in the blocky rig's own coordinates, so
   // they go in the container that maps them onto the body — which is parented
   // to the HEAD, so a helmet turns with the skull instead of staying bolted to
@@ -37137,12 +37260,22 @@ function applyPixelSkin(art, parts) {
   if (neck) neck.material = charMat('n:' + art._id, art.head.side);
   torso.material = charFaceMats('t:' + art._id, art.torso);
   // armLimbs is [upperL, foreL, upperR, foreR]; legLimbs is [thighL, shinL, …]
-  armLimbs.forEach((m, i) => { m.material = charMat('a' + (i % 2) + ':' + art._id, i % 2 ? art.armF : art.armU); });
-  legLimbs.forEach((m, i) => { m.material = charMat('g' + (i % 2) + ':' + art._id, i % 2 ? art.shin : art.leg); });
+  armLimbs.forEach((m, i) => {
+    const lower = i % 2, front = lower ? art.armF : art.armU, side = lower ? art.armFS : art.armUS;
+    m.material = side ? charFaceMats('a' + lower + ':' + art._id, { front, back: front, side, top: (!lower && art.armUT) || side, bottom: side })   // a skin that draws the sides of its limbs
+                      : charMat('a' + lower + ':' + art._id, front);
+  });
+  legLimbs.forEach((m, i) => {
+    const lower = i % 2, front = lower ? art.shin : art.leg, side = lower ? art.shinS : art.legS;
+    m.material = side ? charFaceMats('g' + lower + ':' + art._id, { front, back: front, side, top: side, bottom: side })
+                      : charMat('g' + lower + ':' + art._id, front);
+  });
   // The pelvis wears the trousers, so it takes the thigh texture.
-  if (pelvis) pelvis.material = charMat('g0:' + art._id, art.leg);
-  for (const h of hands) h.material = new THREE.MeshLambertMaterial({ color: art.hand });
-  if (art.foot) for (const f of feet) f.material = new THREE.MeshLambertMaterial({ color: new THREE.Color(art.foot) });
+  if (pelvis) pelvis.material = art.pelvisFaces ? charFaceMats('p:' + art._id, art.pelvisFaces) : art.pelvis ? charMat('p:' + art._id, art.pelvis) : charMat('g0:' + art._id, art.leg);
+  const blankArt = art._id === 'default' || art._id === 'blank_red' || art._id === 'blank_blue';      // The Blank's hands and boots are metal too
+  const metal = (color, rough) => new THREE.MeshStandardMaterial({ color, metalness: 0.72, roughness: rough, envMapIntensity: 1.6 });
+  for (const h of hands) h.material = blankArt ? metal(art.hand, 0.32) : new THREE.MeshLambertMaterial({ color: art.hand });
+  if (art.foot) for (const f of feet) f.material = blankArt ? metal(new THREE.Color(art.foot), 0.42) : new THREE.MeshLambertMaterial({ color: new THREE.Color(art.foot) });
   if (art.hair && art.hair.long) {
     const mat = new THREE.MeshLambertMaterial({ color: art.hair.color });
     const back = new THREE.Mesh(mcBoxGeo(0.46, 0.55, 0.10), mat);
@@ -37166,7 +37299,7 @@ function applyPixelSkin(art, parts) {
   }
 }for (const k of Object.keys(PIXEL_SKINS)) PIXEL_SKINS[k]._id = k;
 
-const SKINS = [
+const FORK_SKINS = [
   { id: 'default',     name: 'Operator',      desc: 'Balaclava, goggle band, amber-tipped mag pouches.' },
   { id: 'soldier',     name: 'Soldier',       desc: 'Olive kit, goggles pushed up, face uncovered.' },
   { id: 'riot',        name: 'Riot',          desc: 'Navy armour behind a full clear face shield.' },
@@ -37180,6 +37313,12 @@ const SKINS = [
   { id: 'spiky',       name: 'Spiky',         desc: 'Spiky hair, no helmet. Your P90 does 5 damage.' },
   { id: 'green_cap',   name: 'Green Cap',     desc: 'Soft green cap. Default loadout enjoyer.' },
   { id: 'shadow',      name: 'Shadow',        desc: 'All black, pale face. The strongest wear crowns.' },
+];
+const SKINS = [
+  { id: 'default',     name: 'The Blank',     desc: 'White armour, a black visor, and your team\'s colour on the shoulders and chest.' },
+  ...Object.entries(SHEET_CHARACTER_ART).filter(([,art])=>art.source).map(([id,{name,desc,swatch}])=>({id,name,desc,swatch})),
+  { id: 'operator', name: 'The Operator', desc: 'The old default: balaclava, goggle band and an amber-tipped plate carrier.' },
+  ...FORK_SKINS.filter(s=>s.id!=='default'),
 ];
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -39465,6 +39604,11 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   const pant  = darkenColor(shirt, 0.55);
   const skin  = look.tone;
   const B = BODY;
+  const drawn = skinId === 'default' ? (team === 'ally' ? 'blank_blue' : 'blank_red') : skinId;
+  const sheet = PIXEL_SKINS[drawn]?.sheetDimensions;
+  const sharp = !!sheet || drawn === 'blank_blue' || drawn === 'blank_red';
+  const shapeGeo = sharp ? (w, h, d) => mcBoxGeo(w, h, d) : characterShapeGeo;
+  const Q = sheet || BLANK, sharpBox = (w, h, d, dy = 0) => mcBoxGeo(w, h, d, dy);
 
   // Flat faces with softly rounded silhouettes; dimensions and joint anchors stay unchanged.
   const mkMat = c => new THREE.MeshLambertMaterial({ color: c });
@@ -39474,7 +39618,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // Six material slots are preserved, including the face on +Z.
   const faceMat  = new THREE.MeshLambertMaterial({ map: faceTextureFor(skin) });
   const headMats = [mkMat(skin), mkMat(skin), mkMat(skin), mkMat(skin), faceMat, mkMat(skin)];
-  const head = new THREE.Mesh(characterShapeGeo(B.headHalfW * 2, B.headH, B.headHalfD * 2,.08), headMats);
+  const head = new THREE.Mesh(sharp ? sharpBox(Q.head, Q.head, Q.head, Q.headCenter - B.headY) : characterShapeGeo(B.headHalfW * 2, B.headH, B.headHalfD * 2,.08), headMats);
   head.position.set(0, B.headY, 0); head.castShadow = true; group.add(head);
 
   // Neck. The blocky body had none and its head floated; this is a short block
@@ -39485,19 +39629,19 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // both cast. The shadow pass is a second draw of everything that casts it,
   // and in Lobby 13 renderer.render is 96% of the frame's CPU — so only parts
   // that change the silhouette earn a place in it (#53).
-  neck.position.set(0, B.neckY, 0); group.add(neck);
+  neck.position.set(0, B.neckY, 0); group.add(neck); if (sharp) neck.visible = false;   // (the sharp head sits straight on the torso)
 
   // ── Torso ─────────────────────────────────────────────────────────────────
   // One 0.55 x 0.65 x 0.30 block in the old model; two here, because the rig
   // twists the chest and the hips must not come with it.
   const torsoMat = mkCloth(shirt);
-  const torso = new THREE.Mesh(characterShapeGeo(B.chestW, B.torsoH, B.chestD,.045), torsoMat);
+  const torso = new THREE.Mesh(sharp ? sharpBox(Q.tw, Q.th, Q.td, (Q.torsoBot + Q.torsoTop) / 2 - B.torsoY) : characterShapeGeo(B.chestW, B.torsoH, B.chestD,.045), torsoMat);
   torso.position.set(0, B.torsoY, 0); torso.castShadow = true; group.add(torso);
 
   // Pelvis — trousers, so it takes the LEG colour.
   const pelvisMat = mkCloth(pant);
-  const pelvis = new THREE.Mesh(characterShapeGeo(B.pelvisW, B.pelvisH, B.chestD,.03), pelvisMat);
-  pelvis.position.set(0, B.pelvisY, 0); pelvis.castShadow = true; group.add(pelvis);
+  const pelvis = new THREE.Mesh(sharp ? sharpBox(Q.tw, B.waist - Q.torsoBot, Q.td, (Q.torsoBot + B.waist) / 2 - B.pelvisY) : characterShapeGeo(B.pelvisW, B.pelvisH, B.chestD,.03), pelvisMat);
+  pelvis.position.set(0, B.pelvisY, 0); pelvis.castShadow = true; group.add(pelvis); if (sharp) pelvis.visible = false;   // (the sharp torso is one block from the legs to the shoulders)
 
   // ── Arms ──────────────────────────────────────────────────────────────────
   // shoulder → upper arm → ELBOW → forearm → WRIST → hand, plus a grip anchor
@@ -39506,38 +39650,50 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // arm swung past it.
   const armMeshes = [], armElbows = [], armWrists = [], armLimbs = [], hands = [];
   [-1, 1].forEach(side => {
-    const pivot = new THREE.Group();
+    const pivot = sheet ? new THREE.Bone() : new THREE.Group();
     pivot.position.set(side * B.shoulderHalf, B.shoulder, 0);
-    const upper = new THREE.Mesh(characterShapeGeo(B.upperArmW, B.upperArm, B.upperArmW), mkCloth(shirt));
-    upper.position.y = -B.upperArm / 2; upper.castShadow = true; pivot.add(upper);
-    const elbow = new THREE.Group(); elbow.position.y = -B.upperArm; pivot.add(elbow);
-    const fore = new THREE.Mesh(characterShapeGeo(B.foreArmW, B.foreArm, B.foreArmW), mkCloth(shirt));
-    fore.position.y = -B.foreArm / 2; fore.castShadow = true; elbow.add(fore);
-    const wrist = new THREE.Group(); wrist.position.y = -B.foreArm; elbow.add(wrist);
-    const hand = new THREE.Mesh(characterShapeGeo(B.handW, B.handH, B.handW,.025), mkMat(skin));
-    hand.position.y = -B.handH / 2; wrist.add(hand);   // no shadow: it is inside the forearm's
-    hands.push(hand);
+    const elbow = sheet ? new THREE.Bone() : new THREE.Group();
+    elbow.position.y = -B.upperArm; pivot.add(elbow);
     group.add(pivot);
-    armMeshes.push(pivot); armElbows.push(elbow); armWrists.push(wrist); armLimbs.push(upper, fore);
+    if (sheet) armLimbs.push(addSheetLimb(group,pivot,elbow,Q.aw,Q.ah,Q.ad,side*(Q.tw+Q.aw)/2,Q.torsoTop));
+    else {
+      const upper = new THREE.Mesh(sharp ? sharpBox(Q.aw, Q.torsoTop - B.elbow, Q.ad) : characterShapeGeo(B.upperArmW, B.upperArm, B.upperArmW), mkCloth(shirt));
+      upper.position.y = sharp ? (Q.torsoTop + B.elbow) / 2 - B.shoulder : -B.upperArm / 2; if (sharp) upper.position.x = -side * (B.shoulderHalf - (Q.tw + Q.aw) / 2); upper.castShadow = true; pivot.add(upper);
+      const fore = new THREE.Mesh(sharp ? sharpBox(Q.aw, B.elbow - (Q.torsoTop - Q.ah), Q.ad) : characterShapeGeo(B.foreArmW, B.foreArm, B.foreArmW), mkCloth(shirt));
+      fore.position.y = sharp ? -(B.elbow - (Q.torsoTop - Q.ah)) / 2 : -B.foreArm / 2; if (sharp) fore.position.x = -side * (B.shoulderHalf - (Q.tw + Q.aw) / 2); fore.castShadow = true; elbow.add(fore);
+      armLimbs.push(upper,fore);
+    }
+    const wrist = new THREE.Group(); wrist.position.y = -B.foreArm; elbow.add(wrist);
+    const hand = new THREE.Mesh(shapeGeo(B.handW, B.handH, B.handW,.025), mkMat(skin));
+    hand.position.y = sheet ? Q.torsoTop-Q.ah-B.wrist+.022 : -B.handH / 2;
+    wrist.add(hand); if (sharp) hand.visible = false;   // the box arm ends in its own cuff
+    hands.push(hand);
+    armMeshes.push(pivot); armElbows.push(elbow); armWrists.push(wrist);
   });
   // Where a weapon is held. Pitched to cancel the firing arm's pose, so a prop
   // parented here comes out level in the ready stance and then travels with the
   // arm through every other one.
   const gripR = new THREE.Group();
   gripR.position.copy(hands[1].position);
-  gripR.rotation.set(GUN_HOLD.gripPitch, GUN_HOLD.gripYaw, 0);
+  gripR.rotation.set(GUN_HOLD.gripPitch + GUN_HOLD.upright, GUN_HOLD.gripYaw, 0);
   armWrists[1].add(gripR);
 
   // ── Legs ──────────────────────────────────────────────────────────────────
   const legMeshes = [], legKnees = [], legAnkles = [], legFeet = [], legLimbs = [];
   [-1, 1].forEach(side => {
-    const pivot = new THREE.Group();
+    const pivot = sheet ? new THREE.Bone() : new THREE.Group();
     pivot.position.set(side * B.hipHalf, B.hip, 0);
-    const thigh = new THREE.Mesh(characterShapeGeo(B.thighW, B.thigh, B.thighD), mkCloth(pant));
-    thigh.position.y = -B.thigh / 2; thigh.castShadow = true; pivot.add(thigh);
-    const knee = new THREE.Group(); knee.position.y = -B.thigh; pivot.add(knee);
-    const shin = new THREE.Mesh(characterShapeGeo(B.shinW, B.shin, B.shinD), mkCloth(pant));
-    shin.position.y = -B.shin / 2; shin.castShadow = true; knee.add(shin);
+    const knee = sheet ? new THREE.Bone() : new THREE.Group();
+    knee.position.y = -B.thigh; pivot.add(knee);
+    group.add(pivot);
+    if (sheet) legLimbs.push(addSheetLimb(group,pivot,knee,Q.lw,Q.lh,Q.ld,side*Q.lw/2,Q.lh));
+    else {
+      const thigh = new THREE.Mesh(sharp ? sharpBox(Q.lw, Q.lh - B.knee, Q.ld) : characterShapeGeo(B.thighW, B.thigh, B.thighD), mkCloth(pant));
+      thigh.position.y = sharp ? (Q.lh + B.knee) / 2 - B.hip : -B.thigh / 2; if (sharp) thigh.position.x = -side * (B.hipHalf - (Q.tw - Q.lw) / 2); thigh.castShadow = true; pivot.add(thigh);
+      const shin = new THREE.Mesh(sharp ? sharpBox(Q.lw, B.knee, Q.ld) : characterShapeGeo(B.shinW, B.shin, B.shinD), mkCloth(pant));
+      shin.position.y = sharp ? -B.knee / 2 : -B.shin / 2; if (sharp) shin.position.x = -side * (B.hipHalf - (Q.tw - Q.lw) / 2); shin.castShadow = true; knee.add(shin);
+      legLimbs.push(thigh,shin);
+    }
     // A real ankle joint, so the foot ROLLS about the ankle instead of spinning
     // about the middle of the boot the way it did when the mesh was the pivot.
     const ankle = new THREE.Group(); ankle.position.y = -B.shin; knee.add(ankle);
@@ -39545,10 +39701,8 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
     const boot = new THREE.Mesh(mcBoxGeo(B.bootW, B.bootH, B.bootD), mkMat(0x241c18));
     // Centred half a boot below the ankle, which puts the sole on y = 0 with
     // the leg straight — the plant the gait solves against.
-    boot.position.set(0, -B.bootH / 2, B.bootZ); boot.castShadow = true; ankle.add(boot);
-    group.add(pivot);
+    boot.position.set(0, -B.bootH / 2, B.bootZ); boot.castShadow = true; ankle.add(boot); if (sharp) boot.visible = false;   // (the sharp leg runs down to the floor)
     legMeshes.push(pivot); legKnees.push(knee); legAnkles.push(ankle); legFeet.push(boot);
-    legLimbs.push(thigh, shin);
   });
 
   // ── Gear containers (see GEAR_FIT) ────────────────────────────────────────
@@ -39561,7 +39715,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // once #53 gave remote players a real aim pitch the head rotated inside gear
   // still bolted to the shoulders. _addShades already knew this rule and said
   // so in its comment; this family never followed it.
-  gearHead.position.y = -hf.s[1] * hf.y;
+  gearHead.position.y = -hf.s[1] * hf.y + (sharp ? Q.headCenter - B.headY : 0);
   head.add(gearHead);
   head._gear = gearHead;   // how _addSeedHair / _addShades find it from the head alone
   const gearBody = new THREE.Group();            // group space, torso gear
@@ -39574,11 +39728,27 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // from inside its own case, and without the container to land in the crown
   // fell back to raw group space and floated 0.7 m over his head.
   group._gearHead = gearHead;
-  applyCharacterSkin(skinId, {
+  // The default skin is The Blank, which carries the team's colour: allies blue, everyone else red (from the viewer's side).
+  applyCharacterSkin(drawn, {
     group, head, headMats, faceMat, torso, torsoMat, pelvis, pelvisMat, neck, neckMat,
     armLimbs, legLimbs, look, hands, feet: legFeet,
     gearHead, gearBody,
   });
+  // A hairstyle chosen on a skin that has headwear (a helmet, a cap, goggles, a visor): the choice wins. Hair used to be refused on
+  // every skin but three (HAIR_COMPATIBLE) because it poked through what was already on the head; now the headwear comes off and the
+  // hair goes on. Choosing nothing ("Skin Default") keeps the skin's own head exactly as it was.
+  {
+    const _hc = cleanHairChoice(opts.hair);
+    if (!sheet && _hc && !HAIR_COMPATIBLE.has(skinId)) {
+      for (const c of gearHead.children.slice()) {
+        gearHead.remove(c);
+        c.traverse(o => { if (o.geometry && !(o.userData && o.userData.sharedGeo)) o.geometry.dispose(); });
+      }
+      gearHead.userData.hairChoice = _hc;
+      if (_hc.style !== 'none') _addSeedHair({ _gear: gearHead }, _hc.style, parseInt(_hc.color, 16));
+    }
+  }
+  if (sharp) group.traverse(o => { if (o.isMesh) o.userData.noSmooth = true; });
   if (opts.crown) setMeshCrown(group, true);
   // Hands take the head's colour: skin on most skins, gloves on the armoured
   // ones. A drawn skin has already said what its hands are; only the recoloured
@@ -39680,7 +39850,7 @@ function fitWeaponPose(mesh, gun, key) {
   if (!rig || !rig.wristL || !gun) return;
   const apply = (c) => {
     rig.firePose = c.fire; rig.supPose = c.sup; rig.magPose = c.mag;
-    rig.gripR.rotation.set(c.fire.pitch, GUN_HOLD.gripYaw, 0);
+    rig.gripR.rotation.set(c.fire.pitch + GUN_HOLD.upright, GUN_HOLD.gripYaw, 0);
   };
   // The arms are solved from the weapon's SHAPE, so that is what the cache is
   // keyed on rather than its name. A cold Lobby 13 holds seventeen different
@@ -39749,6 +39919,7 @@ function fitWeaponPose(mesh, gun, key) {
     }
   const fire = { x: fb.sx, ex: fb.ex, pitch: -(fb.sx + fb.ex) };
   fireErr(fb.sx, fb.ex);                      // leave the arm in the solved pose
+  rig.gripR.rotation.x += GUN_HOLD.upright;   // ...and the weapon raised, so the support hand below is solved onto the raised handguard
 
   // ── Support arm, onto wherever that put the weapon ────────────────────────
   mesh.updateMatrixWorld(true);
